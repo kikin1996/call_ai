@@ -142,7 +142,7 @@ async function handleIncoming(params: URLSearchParams): Promise<NextResponse> {
 
   if (settings) {
     const name = (viewing as { client_name: string }).client_name || number;
-    await notify(settings, `Odpověď klienta – ${name}`, `💬 Odpověď klienta: ${name} (${number})\n📍 ${(viewing as { address: string }).address}\n→ ${confirmedLabel}\n${reason}`);
+    await notify(settings, `Odpověď klienta – ${name}`, `💬 Odpověď klienta: ${name} (${number})\n📍 ${(viewing as { address: string }).address}\n✉️ Zpráva: "${message}"\n→ ${confirmedLabel}${reason ? ` (${reason})` : ""}`);
   }
 
   return NextResponse.json({ ok: true, intent, status: newStatus ?? "unchanged" });
