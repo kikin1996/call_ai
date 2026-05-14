@@ -11,5 +11,9 @@ export async function sendWhatsAppMessage(
   text: string
 ): Promise<void> {
   const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(text)}&apikey=${encodeURIComponent(apiKey)}`;
-  await fetch(url);
+  const res = await fetch(url);
+  const body = await res.text();
+  if (!res.ok || body.toLowerCase().includes("error")) {
+    throw new Error(`CallMeBot: ${body.slice(0, 200)}`);
+  }
 }
