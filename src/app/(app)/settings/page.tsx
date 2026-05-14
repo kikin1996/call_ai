@@ -75,6 +75,10 @@ function SettingsPageInner() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveOk, setSaveOk] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [testingWhatsapp, setTestingWhatsapp] = useState(false);
+  const [testWhatsappResult, setTestWhatsappResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [calendarConnected, setCalendarConnected] = useState<boolean | null>(null);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [defaultExtras, setDefaultExtras] = useState<DefaultExtra[]>([]);
@@ -644,6 +648,36 @@ function SettingsPageInner() {
                     </button>
                   </div>
                 </div>
+                <div className="flex items-center gap-3 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={testingWhatsapp}
+                    onClick={async () => {
+                      setTestingWhatsapp(true);
+                      setTestWhatsappResult(null);
+                      try {
+                        const r = await fetch("/api/test/whatsapp", { method: "POST" });
+                        const d = await r.json().catch(() => ({}));
+                        setTestWhatsappResult(r.ok ? { ok: true, msg: "Zpráva odeslána!" } : { ok: false, msg: d.error ?? "Chyba" });
+                      } catch {
+                        setTestWhatsappResult({ ok: false, msg: "Síťová chyba" });
+                      } finally {
+                        setTestingWhatsapp(false);
+                      }
+                    }}
+                  >
+                    {testingWhatsapp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                    Test WhatsApp
+                  </Button>
+                  {testWhatsappResult && (
+                    <span className={`text-sm ${testWhatsappResult.ok ? "text-emerald-600" : "text-destructive"}`}>
+                      {testWhatsappResult.ok ? <CheckCircle className="h-4 w-4 inline mr-1" /> : <XCircle className="h-4 w-4 inline mr-1" />}
+                      {testWhatsappResult.msg}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -667,6 +701,42 @@ function SettingsPageInner() {
                     <p className="text-sm text-destructive mt-1">
                       {form.formState.errors.notificationEmail.message}
                     </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={testingEmail || !form.watch("notificationEmail")}
+                    onClick={async () => {
+                      const email = form.getValues("notificationEmail");
+                      if (!email) return;
+                      setTestingEmail(true);
+                      setTestEmailResult(null);
+                      try {
+                        const r = await fetch("/api/test/email", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ to: email }),
+                        });
+                        const d = await r.json().catch(() => ({}));
+                        setTestEmailResult(r.ok ? { ok: true, msg: "Email odeslán!" } : { ok: false, msg: d.error ?? "Chyba" });
+                      } catch {
+                        setTestEmailResult({ ok: false, msg: "Síťová chyba" });
+                      } finally {
+                        setTestingEmail(false);
+                      }
+                    }}
+                  >
+                    {testingEmail ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                    Test Email
+                  </Button>
+                  {testEmailResult && (
+                    <span className={`text-sm ${testEmailResult.ok ? "text-emerald-600" : "text-destructive"}`}>
+                      {testEmailResult.ok ? <CheckCircle className="h-4 w-4 inline mr-1" /> : <XCircle className="h-4 w-4 inline mr-1" />}
+                      {testEmailResult.msg}
+                    </span>
                   )}
                 </div>
               </div>
