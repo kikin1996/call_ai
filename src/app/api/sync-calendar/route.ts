@@ -83,11 +83,14 @@ export async function POST() {
 
     const items = events.items ?? [];
 
-    // Smazat všechny stávající prohlídky uživatele a načíst znovu
-    await supabaseAdmin
+    // Načíst existující prohlídky uživatele (zachováme jejich stav)
+    const { data: existingViewings } = await supabaseAdmin
       .from("viewings")
-      .delete()
+      .select("id, calendar_event_id, status, sms2h_sent, sms1h_sent, vapi_called, sms_sent_at, confirmed_at, sms2h_enabled, sms1h_enabled, vapi_enabled, extra_notifications")
       .eq("user_id", session.user.id);
+
+    const existingMap = new Map((existingViewings ?? []).map((v) => [v.calendar_event_id, v]));
+    const calendarEventIds = new Set<string>();
 
     for (const ev of items) {
       const start = ev.start?.dateTime ?? ev.start?.date;
@@ -126,28 +129,44 @@ export async function POST() {
       }
       if (!parsed) continue;
 
+      calendarEventIds.add(ev.id);
       const nameCheck = isSuspiciousClientName(parsed.clientName);
       const clientName = nameCheck.fixedName ?? parsed.clientName;
+      const existing = existingMap.get(ev.id);
 
-      await supabaseAdmin.from("viewings").insert({
-        user_id: session.user.id,
-        calendar_event_id: ev.id,
-        address: parsed.address,
-        client_phone: parsed.clientPhone,
-        client_name: clientName,
-        event_start: parsed.start,
-        event_end: parsed.end,
-        sms2h_enabled: settings?.default_sms2h_enabled ?? true,
-        sms1h_enabled: settings?.default_sms1h_enabled ?? true,
-        vapi_enabled: settings?.default_vapi_enabled ?? true,
-        extra_notifications: ((settings?.default_extra_notifications ?? []) as { id: string; type: string; minutesBefore: number; label: string }[]).map((n) => ({
-          ...n,
-          id: crypto.randomUUID(),
-          sent: false,
-          enabled: true,
-        })),
-        updated_at: new Date().toISOString(),
-      });
+      if (existing) {
+        // Aktualizovat jen kalendářová data, zachovat stav
+        await supabaseAdmin.from("viewings").update({
+          address: parsed.address,
+          client_phone: parsed.clientPhone,
+          client_name: clientName,
+          event_start: parsed.start,
+          event_end: parsed.end,
+          updated_at: new Date().toISOString(),
+        }).eq("id", existing.id);
+      } else {
+        // Nová prohlídka
+        await supabaseAdmin.from("viewings").insert({
+          user_id: session.user.id,
+          calendar_event_id: ev.id,
+          address: parsed.address,
+          client_phone: parsed.clientPhone,
+          client_name: clientName,
+          event_start: parsed.start,
+          event_end: parsed.end,
+          sms2h_enabled: settings?.default_sms2h_enabled ?? true,
+          sms1h_enabled: settings?.default_sms1h_enabled ?? true,
+          vapi_enabled: settings?.default_vapi_enabled ?? true,
+          extra_notifications: ((settings?.default_extra_notifications ?? []) as { id: string; type: string; minutesBefore: number; label: string }[]).map((n) => ({
+            ...n,
+            id: crypto.randomUUID(),
+            sent: false,
+            enabled: true,
+          })),
+          updated_at: new Date().toISOString(),
+        });
+      }
+
 
       if (isMissingPhone(parsed.clientPhone)) {
         missingPhoneItems.push({ address: parsed.address, start: parsed.start });
@@ -156,6 +175,11 @@ export async function POST() {
         suspiciousNameItems.push({ address: parsed.address, start: parsed.start, name: parsed.clientName, reason: nameCheck.reason ?? "" });
       }
       synced++;
+    }
+    // Smazat prohlídky které už nejsou v Google Kalendáři
+    const toDelete = (existingViewings ?? []).filter((v) => !calendarEventIds.has(v.calendar_event_id)).map((v) => v.id);
+    if (toDelete.length > 0) {
+      await supabaseAdmin.from("viewings").delete().in("id", toDelete);
     }
   } catch (err) {
     console.error("Sync calendar:", err);
