@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const redirectUri = `${request.nextUrl.origin}/api/auth/google-calendar/callback`;
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin).replace(/\/$/, "");
+  const redirectUri = `${appUrl}/api/auth/google-calendar/callback`;
   if (!clientId) {
     return NextResponse.json(
       { error: "GOOGLE_CLIENT_ID not set" },

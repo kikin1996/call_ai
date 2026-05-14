@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri = `${url.origin}/api/auth/google-calendar/callback`;
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || url.origin).replace(/\/$/, "");
+  const redirectUri = `${appUrl}/api/auth/google-calendar/callback`;
   if (!clientId || !clientSecret) {
     return NextResponse.redirect(
       new URL("/settings?calendar=config", request.url)
