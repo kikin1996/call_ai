@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import Link from "next/link";
+import { NavbarAuth } from "@/components/NavbarAuth";
 import {
   CalendarDays,
   MessageSquare,
@@ -39,18 +40,7 @@ export default async function HomePage() {
             </span>
           </div>
           <nav className="flex items-center gap-2">
-            <Link
-              href="/login"
-              className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              Přihlásit se
-            </Link>
-            <Link
-              href="/register"
-              className="rounded-lg bg-navy px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-navy-light"
-            >
-              Registrovat se
-            </Link>
+            <NavbarAuth />
           </nav>
         </div>
       </header>
