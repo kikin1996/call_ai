@@ -285,6 +285,62 @@ export default function AiCallPage() {
                       disabled={running}
                     />
                   </div>
+
+                  {/* Odpověď AI asistenta */}
+                  {(() => {
+                    const log = logs.find((l) => l.recordId === rec.id);
+                    const meta = log ? (STATUS_META[log.status] ?? STATUS_META.pending) : null;
+                    return (
+                      <div className="rounded-lg border border-border bg-background overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/20">
+                          <p className="text-xs font-medium text-foreground">Odpověď AI asistenta</p>
+                          {meta && (
+                            <span className={`flex items-center gap-1 text-[11px] font-medium ${meta.color}`}>
+                              {meta.icon} {meta.label}
+                            </span>
+                          )}
+                          {log?.durationSeconds != null && (
+                            <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
+                              <Clock className="h-3 w-3" />
+                              {Math.floor(log.durationSeconds / 60)}:{String(log.durationSeconds % 60).padStart(2, "0")}
+                            </span>
+                          )}
+                        </div>
+                        <div className="p-3 min-h-[80px]">
+                          {!log || log.status === "pending" ? (
+                            <p className="text-xs text-muted-foreground italic">Odpověď se zobrazí po skončení hovoru…</p>
+                          ) : log.status === "calling" || log.status === "ringing" || log.status === "in-progress" ? (
+                            <p className="text-xs text-blue-600 flex items-center gap-1.5">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Hovor probíhá, čekám na výsledek…
+                            </p>
+                          ) : log.error ? (
+                            <p className="text-xs text-destructive">{log.error}</p>
+                          ) : log.summary ? (
+                            <div className="space-y-2">
+                              <p className="text-xs text-foreground whitespace-pre-wrap">{log.summary}</p>
+                              {log.transcript && (
+                                <details className="group">
+                                  <summary className="text-[11px] font-medium text-navy cursor-pointer select-none hover:underline">
+                                    Zobrazit přepis hovoru
+                                  </summary>
+                                  <div className="mt-1.5 rounded border border-border bg-muted/30 px-2 py-1.5 text-[11px] text-foreground whitespace-pre-wrap max-h-40 overflow-y-auto">
+                                    {log.transcript}
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">
+                              {log.status === "no-answer" ? "Majitel nezvedl telefon." :
+                               log.status === "busy" ? "Linka byla obsazená." :
+                               log.status === "cancelled" ? "Hovor byl zrušen." :
+                               "Shrnutí není k dispozici."}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
