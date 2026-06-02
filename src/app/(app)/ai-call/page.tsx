@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,134 +8,162 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Phone, Loader2, CheckCircle, XCircle, AlertCircle,
-  ChevronDown, ChevronUp, PhoneCall, Clock,
+  ChevronDown, ChevronUp, PhoneCall, Clock, Plus, Trash2, Play, Square,
 } from "lucide-react";
 
-interface CallResult {
-  status: string;
-  endedReason: string | null;
+interface CallRecord {
+  id: string;
+  phone: string;
+  ownerName: string;
+  listing: string;
+  expanded: boolean;
+}
+
+interface CallLog {
+  recordId: string;
+  phone: string;
+  ownerName: string;
+  callId: string | null;
+  status: "pending" | "calling" | "ringing" | "in-progress" | "ended" | "failed" | "no-answer" | "busy" | "cancelled";
   summary: string | null;
   transcript: string | null;
   durationSeconds: number | null;
+  endedReason: string | null;
+  error: string | null;
 }
 
 const STORAGE_KEY = "renote_ai_call_config";
 
 function loadConfig() {
   if (typeof window === "undefined") return { apiKey: "", assistantId: "", phoneNumberId: "" };
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}"); }
+  catch { return {}; }
 }
 
+function newRecord(): CallRecord {
+  return { id: crypto.randomUUID(), phone: "", ownerName: "", listing: "", expanded: true };
+}
+
+const STATUS_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  pending:      { label: "Čeká",          color: "text-muted-foreground", icon: <Clock className="h-3.5 w-3.5" /> },
+  calling:      { label: "Spouštím…",     color: "text-blue-600",         icon: <Loader2 className="h-3.5 w-3.5 animate-spin" /> },
+  ringing:      { label: "Vyzvání",       color: "text-blue-600",         icon: <PhoneCall className="h-3.5 w-3.5 animate-pulse" /> },
+  "in-progress":{ label: "Probíhá",       color: "text-emerald-600",      icon: <PhoneCall className="h-3.5 w-3.5 animate-pulse" /> },
+  ended:        { label: "Ukončeno",      color: "text-emerald-600",      icon: <CheckCircle className="h-3.5 w-3.5" /> },
+  failed:       { label: "Selhalo",       color: "text-destructive",      icon: <XCircle className="h-3.5 w-3.5" /> },
+  "no-answer":  { label: "Nezvedá",       color: "text-amber-600",        icon: <XCircle className="h-3.5 w-3.5" /> },
+  busy:         { label: "Obsazeno",      color: "text-amber-600",        icon: <XCircle className="h-3.5 w-3.5" /> },
+  cancelled:    { label: "Zrušeno",       color: "text-muted-foreground", icon: <Square className="h-3.5 w-3.5" /> },
+};
+
+const DONE_STATUSES = ["ended", "failed", "no-answer", "busy", "cancelled"];
+
 export default function AiCallPage() {
-  const [configOpen, setConfigOpen] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [assistantId, setAssistantId] = useState("");
-  const [phoneNumberId, setPhoneNumberId] = useState("");
+  const cfg = loadConfig();
+  const [configOpen, setConfigOpen] = useState(!cfg.apiKey);
+  const [apiKey, setApiKey] = useState(cfg.apiKey ?? "");
+  const [assistantId, setAssistantId] = useState(cfg.assistantId ?? "");
+  const [phoneNumberId, setPhoneNumberId] = useState(cfg.phoneNumberId ?? "");
 
-  const [phone, setPhone] = useState("");
-  const [ownerName, setOwnerName] = useState("");
-  const [listing, setListing] = useState("");
-
-  const [calling, setCalling] = useState(false);
-  const [callId, setCallId] = useState<string | null>(null);
-  const [result, setResult] = useState<CallResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [polling, setPolling] = useState(false);
-
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    const cfg = loadConfig();
-    if (cfg.apiKey) setApiKey(cfg.apiKey);
-    if (cfg.assistantId) setAssistantId(cfg.assistantId);
-    if (cfg.phoneNumberId) setPhoneNumberId(cfg.phoneNumberId);
-    if (!cfg.apiKey) setConfigOpen(true);
-  }, []);
+  const [records, setRecords] = useState<CallRecord[]>([newRecord()]);
+  const [logs, setLogs] = useState<CallLog[]>([]);
+  const [running, setRunning] = useState(false);
+  const [currentIdx, setCurrentIdx] = useState<number | null>(null);
+  const abortRef = useRef(false);
 
   const saveConfig = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiKey, assistantId, phoneNumberId }));
     setConfigOpen(false);
   };
 
-  const stopPolling = () => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = null;
-    setPolling(false);
+  const addRecord = () => {
+    if (records.length >= 10) return;
+    setRecords((r) => [...r, newRecord()]);
   };
 
-  const startPolling = (id: string) => {
-    setPolling(true);
-    pollRef.current = setInterval(async () => {
+  const removeRecord = (id: string) => {
+    setRecords((r) => r.filter((x) => x.id !== id));
+  };
+
+  const updateRecord = (id: string, field: keyof CallRecord, value: string | boolean) => {
+    setRecords((r) => r.map((x) => x.id === id ? { ...x, [field]: value } : x));
+  };
+
+  const updateLog = useCallback((recordId: string, patch: Partial<CallLog>) => {
+    setLogs((prev) => prev.map((l) => l.recordId === recordId ? { ...l, ...patch } : l));
+  }, []);
+
+  const pollUntilDone = async (callId: string, recordId: string): Promise<void> => {
+    return new Promise((resolve) => {
+      const iv = setInterval(async () => {
+        if (abortRef.current) { clearInterval(iv); resolve(); return; }
+        try {
+          const r = await fetch(`/api/ai-call/${callId}?apiKey=${encodeURIComponent(apiKey)}`);
+          const data = await r.json();
+          updateLog(recordId, {
+            status: data.status,
+            summary: data.summary ?? null,
+            transcript: data.transcript ?? null,
+            durationSeconds: data.durationSeconds ?? null,
+            endedReason: data.endedReason ?? null,
+          });
+          if (DONE_STATUSES.includes(data.status)) { clearInterval(iv); resolve(); }
+        } catch { clearInterval(iv); resolve(); }
+      }, 4000);
+    });
+  };
+
+  const handleStart = async () => {
+    const valid = records.filter((r) => r.phone.trim());
+    if (!valid.length) return;
+    if (!apiKey || !assistantId || !phoneNumberId) { setConfigOpen(true); return; }
+
+    abortRef.current = false;
+    setRunning(true);
+    setLogs(valid.map((r) => ({
+      recordId: r.id, phone: r.phone, ownerName: r.ownerName,
+      callId: null, status: "pending", summary: null, transcript: null,
+      durationSeconds: null, endedReason: null, error: null,
+    })));
+
+    for (let i = 0; i < valid.length; i++) {
+      if (abortRef.current) break;
+      const rec = valid[i];
+      setCurrentIdx(i);
+      updateLog(rec.id, { status: "calling" });
+
       try {
-        const r = await fetch(`/api/ai-call/${id}?apiKey=${encodeURIComponent(apiKey)}`);
-        const data: CallResult = await r.json();
-        setResult(data);
-        if (["ended", "failed", "no-answer", "busy", "cancelled"].includes(data.status)) {
-          stopPolling();
-        }
+        const r = await fetch("/api/ai-call", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey, assistantId, phoneNumberId, phone: rec.phone, ownerName: rec.ownerName, listing: rec.listing }),
+        });
+        const data = await r.json();
+        if (!r.ok) { updateLog(rec.id, { status: "failed", error: data.error ?? "Chyba" }); continue; }
+        updateLog(rec.id, { callId: data.callId, status: "ringing" });
+        await pollUntilDone(data.callId, rec.id);
       } catch {
-        stopPolling();
+        updateLog(rec.id, { status: "failed", error: "Síťová chyba" });
       }
-    }, 4000);
-  };
-
-  const handleCall = async () => {
-    if (!apiKey || !assistantId || !phoneNumberId || !phone) {
-      setError("Vyplňte VAPI konfiguraci a telefonní číslo.");
-      return;
     }
-    setCalling(true);
-    setError(null);
-    setResult(null);
-    setCallId(null);
-    stopPolling();
 
-    try {
-      const r = await fetch("/api/ai-call", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey, assistantId, phoneNumberId, phone, ownerName, listing }),
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        setError(data.error ?? "Chyba při spouštění hovoru.");
-        return;
-      }
-      setCallId(data.callId);
-      startPolling(data.callId);
-    } catch {
-      setError("Síťová chyba.");
-    } finally {
-      setCalling(false);
-    }
+    setRunning(false);
+    setCurrentIdx(null);
   };
 
-  const statusLabel: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-    queued: { label: "Ve frontě", icon: <Clock className="h-4 w-4" />, color: "text-amber-600" },
-    ringing: { label: "Vyzvání", icon: <PhoneCall className="h-4 w-4 animate-pulse" />, color: "text-blue-600" },
-    "in-progress": { label: "Probíhá hovor", icon: <PhoneCall className="h-4 w-4 animate-pulse" />, color: "text-emerald-600" },
-    ended: { label: "Ukončeno", icon: <CheckCircle className="h-4 w-4" />, color: "text-emerald-600" },
-    failed: { label: "Selhalo", icon: <XCircle className="h-4 w-4" />, color: "text-destructive" },
-    "no-answer": { label: "Nedvíhá", icon: <XCircle className="h-4 w-4" />, color: "text-amber-600" },
-    busy: { label: "Obsazeno", icon: <XCircle className="h-4 w-4" />, color: "text-amber-600" },
-    cancelled: { label: "Zrušeno", icon: <XCircle className="h-4 w-4" />, color: "text-muted-foreground" },
-  };
+  const handleStop = () => { abortRef.current = true; };
 
-  const currentStatus = result ? (statusLabel[result.status] ?? { label: result.status, icon: <AlertCircle className="h-4 w-4" />, color: "text-muted-foreground" }) : null;
+  const configValid = !!(apiKey && assistantId && phoneNumberId);
+  const hasValidRecords = records.some((r) => r.phone.trim());
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="p-6 max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-display font-semibold text-navy flex items-center gap-2">
-          <Phone className="h-6 w-6" />
-          AI Call Asistent
+          <Phone className="h-6 w-6" /> AI Call Asistent
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          AI asistent zavolá majiteli nemovitosti a zjistí zájem o prodej přes realitní kancelář.
+          Přidejte záznamy s čísly majitelů a spusťte hromadné volání.
         </p>
       </div>
 
@@ -145,7 +173,7 @@ export default function AiCallPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
               VAPI konfigurace
-              {apiKey && assistantId && phoneNumberId && (
+              {configValid && (
                 <span className="text-[11px] font-normal text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Uloženo</span>
               )}
             </CardTitle>
@@ -167,112 +195,197 @@ export default function AiCallPage() {
               <Label htmlFor="phoneNumberId">Phone Number ID</Label>
               <Input id="phoneNumberId" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="mt-1" />
             </div>
-            <Button type="button" variant="navy" size="sm" onClick={saveConfig}>
-              Uložit konfiguraci
-            </Button>
+            <Button type="button" variant="navy" size="sm" onClick={saveConfig}>Uložit konfiguraci</Button>
           </CardContent>
         )}
       </Card>
 
-      {/* Formulář volání */}
+      {/* Seznam záznamů */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Nové volání</CardTitle>
-          <CardDescription>Vyplňte informace o majiteli a nemovitosti.</CardDescription>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Záznamy k volání</CardTitle>
+              <CardDescription className="text-xs mt-0.5">{records.length} / 10 záznamů</CardDescription>
+            </div>
+            <Button
+              type="button" variant="outline" size="sm"
+              onClick={addRecord}
+              disabled={records.length >= 10 || running}
+              className="gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" /> Přidat
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="phone">Telefonní číslo majitele *</Label>
-              <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+420 777 888 999" className="mt-1" />
-            </div>
-            <div>
-              <Label htmlFor="ownerName">Jméno majitele</Label>
-              <Input id="ownerName" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Jan Novák" className="mt-1" />
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="listing">Inzerát / popis nemovitosti</Label>
-            <Textarea
-              id="listing"
-              value={listing}
-              onChange={(e) => setListing(e.target.value)}
-              rows={6}
-              placeholder="Vložte celý text inzerátu nebo popis nemovitosti... Např: Prodej bytu 3+1, 80m², Praha 6, cena 6 500 000 Kč..."
-              className="mt-1"
-            />
-          </div>
+        <CardContent className="space-y-2">
+          {records.map((rec, idx) => (
+            <div key={rec.id} className="rounded-lg border border-border overflow-hidden">
+              {/* Záhlaví záznamu */}
+              <div
+                className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors select-none"
+                onClick={() => updateRecord(rec.id, "expanded", !rec.expanded)}
+              >
+                <span className="text-xs font-medium text-muted-foreground w-5 shrink-0">{idx + 1}.</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {rec.ownerName || rec.phone || <span className="text-muted-foreground">Nevyplněno</span>}
+                  </p>
+                  {rec.phone && rec.ownerName && (
+                    <p className="text-xs text-muted-foreground truncate">{rec.phone}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {!running && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); removeRecord(rec.id); }}
+                      className="p-1 text-muted-foreground hover:text-destructive transition-colors rounded"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {rec.expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </div>
+              </div>
 
-          {error && (
-            <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2 flex items-center gap-2">
-              <XCircle className="h-4 w-4 shrink-0" />
-              {error}
+              {/* Tělo záznamu */}
+              {rec.expanded && (
+                <div className="px-3 pb-3 pt-1 border-t border-border bg-muted/10 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Telefonní číslo *</Label>
+                      <Input
+                        value={rec.phone}
+                        onChange={(e) => updateRecord(rec.id, "phone", e.target.value)}
+                        placeholder="+420 777 888 999"
+                        className="mt-1 h-8 text-sm"
+                        disabled={running}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Jméno majitele</Label>
+                      <Input
+                        value={rec.ownerName}
+                        onChange={(e) => updateRecord(rec.id, "ownerName", e.target.value)}
+                        placeholder="Jan Novák"
+                        className="mt-1 h-8 text-sm"
+                        disabled={running}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Inzerát / popis nemovitosti</Label>
+                    <Textarea
+                      value={rec.listing}
+                      onChange={(e) => updateRecord(rec.id, "listing", e.target.value)}
+                      rows={3}
+                      placeholder="Prodej bytu 3+1, 80m², Praha 6, 6 500 000 Kč…"
+                      className="mt-1 text-sm resize-none"
+                      disabled={running}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {records.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Žádné záznamy. Klikněte na „Přidat".
             </p>
           )}
-
-          <Button
-            type="button"
-            variant="navy"
-            disabled={calling || polling}
-            onClick={handleCall}
-            className="w-full"
-          >
-            {calling ? (
-              <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Spouštím hovor…</>
-            ) : polling ? (
-              <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Probíhá hovor…</>
-            ) : (
-              <><Phone className="h-4 w-4 mr-2" /> Zavolat</>
-            )}
-          </Button>
         </CardContent>
       </Card>
 
-      {/* Výsledek hovoru */}
-      {(callId || result) && (
+      {/* Start / Stop */}
+      <div className="flex gap-3">
+        {!running ? (
+          <Button
+            type="button"
+            variant="navy"
+            className="flex-1 gap-2"
+            disabled={!hasValidRecords || !configValid}
+            onClick={handleStart}
+          >
+            <Play className="h-4 w-4" />
+            Spustit volání ({records.filter((r) => r.phone.trim()).length} čísel)
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="destructive"
+            className="flex-1 gap-2"
+            onClick={handleStop}
+          >
+            <Square className="h-4 w-4" />
+            Zastavit
+          </Button>
+        )}
+      </div>
+
+      {/* Log odpovědí */}
+      {logs.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              Výsledek hovoru
-              {currentStatus && (
-                <span className={`flex items-center gap-1 text-sm font-normal ${currentStatus.color}`}>
-                  {currentStatus.icon}
-                  {currentStatus.label}
-                </span>
-              )}
-              {polling && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-auto" />}
+              Průběh volání
+              {running && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             </CardTitle>
-            {callId && <CardDescription className="text-xs font-mono">ID: {callId}</CardDescription>}
           </CardHeader>
-          <CardContent className="space-y-4">
-            {result?.durationSeconds != null && (
-              <p className="text-sm text-muted-foreground">
-                <Clock className="inline h-3.5 w-3.5 mr-1" />
-                Délka hovoru: {Math.floor(result.durationSeconds / 60)}:{String(result.durationSeconds % 60).padStart(2, "0")} min
-              </p>
-            )}
-            {result?.endedReason && (
-              <p className="text-sm text-muted-foreground">Důvod ukončení: <span className="font-medium text-foreground">{result.endedReason}</span></p>
-            )}
-            {result?.summary && (
-              <div>
-                <p className="text-sm font-medium text-foreground mb-1">Shrnutí hovoru</p>
-                <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-foreground whitespace-pre-wrap">
-                  {result.summary}
+          <CardContent className="space-y-3">
+            {logs.map((log, idx) => {
+              const meta = STATUS_META[log.status] ?? { label: log.status, color: "text-muted-foreground", icon: <AlertCircle className="h-3.5 w-3.5" /> };
+              const isActive = running && currentIdx === logs.findIndex((l) => l.recordId === log.recordId && !DONE_STATUSES.includes(l.status) && l.status !== "pending");
+              return (
+                <div key={log.recordId} className={`rounded-lg border p-3 space-y-2 transition-colors ${isActive ? "border-navy/30 bg-navy/5" : "border-border"}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-5 shrink-0">{idx + 1}.</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">
+                        {log.ownerName || log.phone}
+                        {log.ownerName && <span className="text-muted-foreground font-normal ml-1 text-xs">{log.phone}</span>}
+                      </p>
+                    </div>
+                    <span className={`flex items-center gap-1 text-xs font-medium ${meta.color}`}>
+                      {meta.icon} {meta.label}
+                    </span>
+                  </div>
+
+                  {log.error && (
+                    <p className="text-xs text-destructive bg-destructive/10 rounded px-2 py-1">{log.error}</p>
+                  )}
+
+                  {log.durationSeconds != null && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {Math.floor(log.durationSeconds / 60)}:{String(log.durationSeconds % 60).padStart(2, "0")} min
+                      {log.endedReason && <span className="ml-1">· {log.endedReason}</span>}
+                    </p>
+                  )}
+
+                  {log.summary && (
+                    <div>
+                      <p className="text-xs font-medium text-foreground mb-1">Shrnutí</p>
+                      <div className="rounded border border-border bg-muted/30 px-2.5 py-2 text-xs text-foreground whitespace-pre-wrap">
+                        {log.summary}
+                      </div>
+                    </div>
+                  )}
+
+                  {log.transcript && (
+                    <details className="group">
+                      <summary className="text-xs font-medium text-navy cursor-pointer select-none hover:underline">
+                        Přepis hovoru
+                      </summary>
+                      <div className="mt-1.5 rounded border border-border bg-muted/30 px-2.5 py-2 text-xs text-foreground whitespace-pre-wrap max-h-48 overflow-y-auto">
+                        {log.transcript}
+                      </div>
+                    </details>
+                  )}
                 </div>
-              </div>
-            )}
-            {result?.transcript && (
-              <div>
-                <p className="text-sm font-medium text-foreground mb-1">Přepis hovoru</p>
-                <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-foreground whitespace-pre-wrap max-h-64 overflow-y-auto">
-                  {result.transcript}
-                </div>
-              </div>
-            )}
-            {result && !result.summary && !result.transcript && ["ended", "failed", "no-answer", "busy"].includes(result.status) && (
-              <p className="text-sm text-muted-foreground">Shrnutí zatím není k dispozici.</p>
-            )}
+              );
+            })}
           </CardContent>
         </Card>
       )}
