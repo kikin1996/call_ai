@@ -32,6 +32,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Chybí povinné pole (apiKey, assistantId, phoneNumberId, phone)" }, { status: 400 });
   }
 
+  // Načíst broker info z nastavení uživatele
+  const { data: settings } = await supabase
+    .from("user_settings")
+    .select("broker_name, broker_phone, agency_name")
+    .eq("user_id", session.user.id)
+    .maybeSingle();
+
+  const brokerName = settings?.broker_name || "váš makléř";
+  const brokerPhone = settings?.broker_phone || "";
+  const agencyName = settings?.agency_name || "naše realitní kancelář";
+
   const res = await fetch("https://api.vapi.ai/call", {
     method: "POST",
     headers: {
@@ -51,6 +62,9 @@ export async function POST(request: NextRequest) {
           ownerName: ownerName || "Majiteli",
           listing: listing || "",
           phone: toE164(phone),
+          brokerName,
+          brokerPhone,
+          agencyName,
         },
       },
     }),
