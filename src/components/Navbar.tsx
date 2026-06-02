@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Settings, LayoutDashboard, LogOut, ShieldCheck, Coins, CreditCard } from "lucide-react";
+import { CalendarDays, Settings, LayoutDashboard, LogOut, ShieldCheck, Coins, CreditCard, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+  { label: "AI Volání", icon: Phone, path: "/ai-call" },
   { label: "Předplatné", icon: CreditCard, path: "/subscription" },
   { label: "Nastavení", icon: Settings, path: "/settings" },
 ];
