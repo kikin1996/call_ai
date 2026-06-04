@@ -29,7 +29,7 @@ export async function GET(
     status: data.status,
     endedReason: data.endedReason ?? null,
     summary: data.analysis?.summary ?? null,
-    transcript: data.transcript ?? null,
+    transcript: data.artifact?.transcript ?? data.transcript ?? null,
     durationSeconds: data.endedAt && data.startedAt
       ? Math.round((new Date(data.endedAt).getTime() - new Date(data.startedAt).getTime()) / 1000)
       : null,

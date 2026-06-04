@@ -119,18 +119,39 @@ export default function AiCallPage() {
           });
           if (DONE_STATUSES.includes(data.status)) {
             clearInterval(iv);
+
+            // VAPI generuje analysis.summary asynchronně — počkáme a zkusíme znovu
+            let summary = data.summary;
+            let transcript = data.transcript;
+            if (!summary || !transcript) {
+              for (let attempt = 0; attempt < 4; attempt++) {
+                await new Promise((r) => setTimeout(r, 4000));
+                try {
+                  const retry = await fetch(`/api/ai-call/${callId}?apiKey=${encodeURIComponent(apiKey)}`);
+                  const retryData = await retry.json();
+                  if (retryData.summary) summary = retryData.summary;
+                  if (retryData.transcript) transcript = retryData.transcript;
+                  if (summary && transcript) break;
+                } catch { break; }
+              }
+              if (summary || transcript) {
+                updateLog(recordId, { summary, transcript });
+              }
+            }
+
             // Klasifikace výsledku hovoru
-            if (data.summary || data.transcript) {
+            if (summary || transcript) {
               try {
                 const ar = await fetch("/api/ai-call/analyze", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ summary: data.summary, transcript: data.transcript }),
+                  body: JSON.stringify({ summary, transcript }),
                 });
                 const analysis = await ar.json();
                 updateLog(recordId, { outcome: analysis.outcome ?? null, shortSummary: analysis.shortSummary ?? null });
               } catch { /* klasifikace selhala, nevadí */ }
             }
+
             // Odstranit záznam ze seznamu po dokončení
             setTimeout(() => setRecords((prev) => prev.filter((rec) => rec.id !== recordId)), 800);
             resolve();
