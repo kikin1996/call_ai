@@ -16,6 +16,7 @@ interface CallRecord {
   phone: string;
   ownerName: string;
   listing: string;
+  listingUrl: string;
   expanded: boolean;
 }
 
@@ -34,6 +35,7 @@ interface CallLog {
   endedReason: string | null;
   error: string | null;
   outcome: CallOutcome | null;
+  listingUrl: string;
 }
 
 const OUTCOME_META: Record<CallOutcome, { label: string; color: string; bg: string; border: string }> = {
@@ -51,7 +53,7 @@ function loadConfig() {
 }
 
 function newRecord(): CallRecord {
-  return { id: crypto.randomUUID(), phone: "", ownerName: "", listing: "", expanded: true };
+  return { id: crypto.randomUUID(), phone: "", ownerName: "", listing: "", listingUrl: "", expanded: true };
 }
 
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -169,7 +171,7 @@ export default function AiCallPage() {
     abortRef.current = false;
     setRunning(true);
     setLogs(valid.map((r) => ({
-      recordId: r.id, phone: r.phone, ownerName: r.ownerName,
+      recordId: r.id, phone: r.phone, ownerName: r.ownerName, listingUrl: r.listingUrl,
       callId: null, status: "pending", summary: null, shortSummary: null,
       transcript: null, durationSeconds: null, endedReason: null, error: null, outcome: null,
     })));
@@ -323,7 +325,17 @@ export default function AiCallPage() {
                     </div>
                   </div>
                   <div>
-                    <Label className="text-xs">Inzerát / popis nemovitosti</Label>
+                    <Label className="text-xs">URL inzerátu</Label>
+                    <Input
+                      value={rec.listingUrl}
+                      onChange={(e) => updateRecord(rec.id, "listingUrl", e.target.value)}
+                      placeholder="https://www.sreality.cz/…"
+                      className="mt-1 h-8 text-sm"
+                      disabled={running}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Popis nemovitosti (pro AI asistenta)</Label>
                     <Textarea
                       value={rec.listing}
                       onChange={(e) => updateRecord(rec.id, "listing", e.target.value)}
@@ -460,6 +472,16 @@ export default function AiCallPage() {
                         {log.ownerName || log.phone}
                         {log.ownerName && <span className="text-muted-foreground font-normal ml-1 text-xs">{log.phone}</span>}
                       </p>
+                      {log.listingUrl && (
+                        <a
+                          href={log.listingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-navy hover:underline truncate block max-w-xs"
+                        >
+                          {log.listingUrl}
+                        </a>
+                      )}
                     </div>
                     <span className={`flex items-center gap-1 text-xs font-medium ${meta.color}`}>
                       {meta.icon} {meta.label}
