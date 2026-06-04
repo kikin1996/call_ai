@@ -141,18 +141,16 @@ export default function AiCallPage() {
               }
             }
 
-            // Klasifikace výsledku hovoru
-            if (summary || transcript) {
-              try {
-                const ar = await fetch("/api/ai-call/analyze", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ summary, transcript }),
-                });
-                const analysis = await ar.json();
-                updateLog(recordId, { outcome: analysis.outcome ?? null, shortSummary: analysis.shortSummary ?? null });
-              } catch { /* klasifikace selhala, nevadí */ }
-            }
+            // Klasifikace výsledku — vždy zavolat, i když chybí přepis
+            try {
+              const ar = await fetch("/api/ai-call/analyze", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ summary, transcript, endedReason: data.endedReason, status: data.status }),
+              });
+              const analysis = await ar.json();
+              updateLog(recordId, { outcome: analysis.outcome ?? null, shortSummary: analysis.shortSummary ?? null });
+            } catch { /* klasifikace selhala, nevadí */ }
 
             // Odstranit záznam ze seznamu po dokončení
             setTimeout(() => setRecords((prev) => prev.filter((rec) => rec.id !== recordId)), 800);

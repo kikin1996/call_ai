@@ -25,11 +25,29 @@ export async function GET(
 
   const data = await res.json();
 
+  // Transcript: zkus různé cesty kde ho VAPI ukládá
+  let transcript: string | null =
+    data.artifact?.transcript ??
+    data.transcript ??
+    null;
+
+  // Fallback: sestavit přepis z pole messages
+  if (!transcript) {
+    const messages: { role?: string; message?: string; content?: string }[] =
+      data.artifact?.messages ?? data.messages ?? [];
+    if (messages.length > 0) {
+      transcript = messages
+        .filter((m) => m.role && (m.message || m.content))
+        .map((m) => `${m.role === "bot" ? "Asistent" : "Majitel"}: ${m.message ?? m.content}`)
+        .join("\n");
+    }
+  }
+
   return NextResponse.json({
     status: data.status,
     endedReason: data.endedReason ?? null,
     summary: data.analysis?.summary ?? null,
-    transcript: data.artifact?.transcript ?? data.transcript ?? null,
+    transcript: transcript || null,
     durationSeconds: data.endedAt && data.startedAt
       ? Math.round((new Date(data.endedAt).getTime() - new Date(data.startedAt).getTime()) / 1000)
       : null,
