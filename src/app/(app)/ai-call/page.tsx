@@ -19,6 +19,8 @@ interface CallRecord {
   expanded: boolean;
 }
 
+type CallOutcome = "uspesny" | "neutralni" | "odmitnuti";
+
 interface CallLog {
   recordId: string;
   phone: string;
@@ -26,11 +28,19 @@ interface CallLog {
   callId: string | null;
   status: "pending" | "calling" | "ringing" | "in-progress" | "ended" | "failed" | "no-answer" | "busy" | "cancelled";
   summary: string | null;
+  shortSummary: string | null;
   transcript: string | null;
   durationSeconds: number | null;
   endedReason: string | null;
   error: string | null;
+  outcome: CallOutcome | null;
 }
+
+const OUTCOME_META: Record<CallOutcome, { label: string; color: string; bg: string; border: string }> = {
+  uspesny:   { label: "Úspěšný",  color: "text-emerald-700", bg: "bg-emerald-50",  border: "border-emerald-200" },
+  neutralni: { label: "Neutrální", color: "text-amber-700",   bg: "bg-amber-50",    border: "border-amber-200" },
+  odmitnuti: { label: "Odmítnutí", color: "text-red-700",     bg: "bg-red-50",      border: "border-red-200" },
+};
 
 const STORAGE_KEY = "renote_ai_call_config";
 
@@ -107,7 +117,24 @@ export default function AiCallPage() {
             durationSeconds: data.durationSeconds ?? null,
             endedReason: data.endedReason ?? null,
           });
-          if (DONE_STATUSES.includes(data.status)) { clearInterval(iv); resolve(); }
+          if (DONE_STATUSES.includes(data.status)) {
+            clearInterval(iv);
+            // Klasifikace výsledku hovoru
+            if (data.summary || data.transcript) {
+              try {
+                const ar = await fetch("/api/ai-call/analyze", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ summary: data.summary, transcript: data.transcript }),
+                });
+                const analysis = await ar.json();
+                updateLog(recordId, { outcome: analysis.outcome ?? null, shortSummary: analysis.shortSummary ?? null });
+              } catch { /* klasifikace selhala, nevadí */ }
+            }
+            // Odstranit záznam ze seznamu po dokončení
+            setTimeout(() => setRecords((prev) => prev.filter((rec) => rec.id !== recordId)), 800);
+            resolve();
+          }
         } catch { clearInterval(iv); resolve(); }
       }, 4000);
     });
@@ -122,8 +149,8 @@ export default function AiCallPage() {
     setRunning(true);
     setLogs(valid.map((r) => ({
       recordId: r.id, phone: r.phone, ownerName: r.ownerName,
-      callId: null, status: "pending", summary: null, transcript: null,
-      durationSeconds: null, endedReason: null, error: null,
+      callId: null, status: "pending", summary: null, shortSummary: null,
+      transcript: null, durationSeconds: null, endedReason: null, error: null, outcome: null,
     })));
 
     for (let i = 0; i < valid.length; i++) {
@@ -315,9 +342,19 @@ export default function AiCallPage() {
                             </p>
                           ) : log.error ? (
                             <p className="text-xs text-destructive">{log.error}</p>
-                          ) : log.summary ? (
+                          ) : (log.summary || log.shortSummary) ? (
                             <div className="space-y-2">
-                              <p className="text-xs text-foreground whitespace-pre-wrap">{log.summary}</p>
+                              {log.outcome && (
+                                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${OUTCOME_META[log.outcome].color} ${OUTCOME_META[log.outcome].bg} ${OUTCOME_META[log.outcome].border}`}>
+                                  {log.outcome === "uspesny" && <CheckCircle className="h-3 w-3" />}
+                                  {log.outcome === "neutralni" && <AlertCircle className="h-3 w-3" />}
+                                  {log.outcome === "odmitnuti" && <XCircle className="h-3 w-3" />}
+                                  {OUTCOME_META[log.outcome].label}
+                                </span>
+                              )}
+                              {log.shortSummary && (
+                                <p className="text-xs text-foreground leading-relaxed">{log.shortSummary}</p>
+                              )}
                               {log.transcript && (
                                 <details className="group">
                                   <summary className="text-[11px] font-medium text-navy cursor-pointer select-none hover:underline">
@@ -408,6 +445,15 @@ export default function AiCallPage() {
                     </span>
                   </div>
 
+                  {log.outcome && (
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${OUTCOME_META[log.outcome].color} ${OUTCOME_META[log.outcome].bg} ${OUTCOME_META[log.outcome].border}`}>
+                      {log.outcome === "uspesny" && <CheckCircle className="h-3 w-3" />}
+                      {log.outcome === "neutralni" && <AlertCircle className="h-3 w-3" />}
+                      {log.outcome === "odmitnuti" && <XCircle className="h-3 w-3" />}
+                      {OUTCOME_META[log.outcome].label}
+                    </span>
+                  )}
+
                   {log.error && (
                     <p className="text-xs text-destructive bg-destructive/10 rounded px-2 py-1">{log.error}</p>
                   )}
@@ -420,11 +466,11 @@ export default function AiCallPage() {
                     </p>
                   )}
 
-                  {log.summary && (
+                  {log.shortSummary && (
                     <div>
                       <p className="text-xs font-medium text-foreground mb-1">Shrnutí</p>
-                      <div className="rounded border border-border bg-muted/30 px-2.5 py-2 text-xs text-foreground whitespace-pre-wrap">
-                        {log.summary}
+                      <div className="rounded border border-border bg-muted/30 px-2.5 py-2 text-xs text-foreground leading-relaxed">
+                        {log.shortSummary}
                       </div>
                     </div>
                   )}
