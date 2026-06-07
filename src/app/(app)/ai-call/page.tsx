@@ -76,6 +76,9 @@ export default function AiCallPage() {
   const [apiKey, setApiKey] = useState(cfg.apiKey ?? "");
   const [assistantId, setAssistantId] = useState(cfg.assistantId ?? "");
   const [phoneNumberId, setPhoneNumberId] = useState(cfg.phoneNumberId ?? "");
+  const [brokerName, setBrokerName] = useState(cfg.brokerName ?? "");
+  const [brokerPhone, setBrokerPhone] = useState(cfg.brokerPhone ?? "");
+  const [agencyName, setAgencyName] = useState(cfg.agencyName ?? "");
 
   const [records, setRecords] = useState<CallRecord[]>([newRecord()]);
   const [logs, setLogs] = useState<CallLog[]>([]);
@@ -84,7 +87,7 @@ export default function AiCallPage() {
   const abortRef = useRef(false);
 
   const saveConfig = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiKey, assistantId, phoneNumberId }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiKey, assistantId, phoneNumberId, brokerName, brokerPhone, agencyName }));
     setConfigOpen(false);
   };
 
@@ -184,7 +187,7 @@ export default function AiCallPage() {
         const r = await fetch("/api/ai-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ apiKey, assistantId, phoneNumberId, phone: rec.phone, ownerName: rec.ownerName, listing: rec.listing }),
+          body: JSON.stringify({ apiKey, assistantId, phoneNumberId, phone: rec.phone, ownerName: rec.ownerName, listing: rec.listing, brokerName, brokerPhone, agencyName }),
         });
         const data = await r.json();
         if (!r.ok) { updateLog(rec.id, { status: "failed", error: data.error ?? "Chyba" }); continue; }
@@ -243,6 +246,28 @@ export default function AiCallPage() {
               <Label htmlFor="phoneNumberId">Phone Number ID</Label>
               <Input id="phoneNumberId" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="mt-1" />
             </div>
+
+            <div className="pt-1 border-t border-border">
+              <p className="text-xs font-medium text-foreground mt-3 mb-1">Údaje makléře (proměnné pro asistenta)</p>
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Předají se do hovoru jako <code className="bg-muted px-1 rounded">brokerName</code>,{" "}
+                <code className="bg-muted px-1 rounded">brokerPhone</code> a{" "}
+                <code className="bg-muted px-1 rounded">agencyName</code>.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="brokerName">Jméno makléře</Label>
+              <Input id="brokerName" value={brokerName} onChange={(e) => setBrokerName(e.target.value)} placeholder="Jan Novák" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="brokerPhone">Telefon makléře</Label>
+              <Input id="brokerPhone" value={brokerPhone} onChange={(e) => setBrokerPhone(e.target.value)} placeholder="+420 777 888 999" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="agencyName">Název realitní kanceláře</Label>
+              <Input id="agencyName" value={agencyName} onChange={(e) => setAgencyName(e.target.value)} placeholder="Reality Praha" className="mt-1" />
+            </div>
+
             <Button type="button" variant="navy" size="sm" onClick={saveConfig}>Uložit konfiguraci</Button>
           </CardContent>
         )}

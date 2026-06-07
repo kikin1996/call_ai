@@ -51,7 +51,6 @@ export function useAuth() {
       provider: "google",
       options: {
         redirectTo: `${origin}/auth/callback`,
-        scopes: "https://www.googleapis.com/auth/calendar.readonly",
       },
     })
   }

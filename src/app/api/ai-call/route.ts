@@ -19,29 +19,26 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
-  const { apiKey, assistantId, phoneNumberId, phone, ownerName, listing } = body as {
+  const { apiKey, assistantId, phoneNumberId, phone, ownerName, listing, brokerName: bn, brokerPhone: bp, agencyName: an } = body as {
     apiKey: string;
     assistantId: string;
     phoneNumberId: string;
     phone: string;
     ownerName?: string;
     listing?: string;
+    brokerName?: string;
+    brokerPhone?: string;
+    agencyName?: string;
   };
 
   if (!apiKey || !assistantId || !phoneNumberId || !phone) {
     return NextResponse.json({ error: "Chybí povinné pole (apiKey, assistantId, phoneNumberId, phone)" }, { status: 400 });
   }
 
-  // Načíst broker info z nastavení uživatele
-  const { data: settings } = await supabase
-    .from("user_settings")
-    .select("broker_name, broker_phone, agency_name")
-    .eq("user_id", session.user.id)
-    .maybeSingle();
-
-  const brokerName = settings?.broker_name || "váš makléř";
-  const brokerPhone = settings?.broker_phone || "";
-  const agencyName = settings?.agency_name || "naše realitní kancelář";
+  // Broker info z konfigurace volání (localStorage na klientu)
+  const brokerName = bn?.trim() || "váš makléř";
+  const brokerPhone = bp?.trim() || "";
+  const agencyName = an?.trim() || "naše realitní kancelář";
 
   const res = await fetch("https://api.vapi.ai/call", {
     method: "POST",

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { isSupabaseConfigured } from "@/lib/supabase";
-import { Calendar, AlertCircle } from "lucide-react";
+import { Phone, AlertCircle } from "lucide-react";
 // AlertCircle used only in dev
 
 export default function LoginPage() {
@@ -20,7 +20,7 @@ export default function LoginPage() {
   const configured = isSupabaseConfigured();
 
   if (user) {
-    router.replace("/dashboard");
+    router.replace("/ai-call");
     return null;
   }
 
@@ -39,14 +39,13 @@ export default function LoginPage() {
         )}
         <CardHeader className="text-center">
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-navy text-white">
-            <Calendar className="h-6 w-6" />
+            <Phone className="h-6 w-6" />
           </div>
           <CardTitle className="text-2xl font-display text-navy">
-            Renote
+            AI Call
           </CardTitle>
           <CardDescription>
-            Přihlaste se přes Google pro přístup ke kalendáři a automatizaci
-            prohlídek.
+            Přihlaste se přes Google pro přístup k AI asistentovi na volání.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

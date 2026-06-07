@@ -6,10 +6,7 @@ export async function updateSession(request: NextRequest) {
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
-  const isProtected =
-    request.nextUrl.pathname.startsWith("/dashboard") ||
-    request.nextUrl.pathname.startsWith("/settings") ||
-    request.nextUrl.pathname.startsWith("/admin");
+  const isProtected = request.nextUrl.pathname.startsWith("/ai-call");
   const isAuthPage =
     request.nextUrl.pathname === "/login" ||
     request.nextUrl.pathname === "/register";
@@ -20,7 +17,7 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.next({ request });
     }
     if (process.env.NODE_ENV === "development" && isAuthPage && devAdmin) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return NextResponse.redirect(new URL("/ai-call", request.url));
     }
     if (isProtected && !devAdmin) {
       return NextResponse.redirect(new URL("/login", request.url));
@@ -49,7 +46,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getSession();
 
   if (isAuthPage && session) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL("/ai-call", request.url));
   }
   if (isProtected && !session) {
     return NextResponse.redirect(new URL("/login", request.url));

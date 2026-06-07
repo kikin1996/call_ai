@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Renote",
-  description: "Automatizace prohlídek nemovitostí – kalendář, SMS, hovory",
+  title: "AI Call",
+  description: "AI asistent na automatické telefonní hovory (VAPI)",
 };
 
 export default function RootLayout({
