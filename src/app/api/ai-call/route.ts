@@ -19,13 +19,14 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
-  const { apiKey, assistantId, phoneNumberId, phone, ownerName, listing, brokerName: bn, brokerPhone: bp, agencyName: an } = body as {
+  const { apiKey, assistantId, phoneNumberId, phone, ownerName, listing, notes, brokerName: bn, brokerPhone: bp, agencyName: an } = body as {
     apiKey: string;
     assistantId: string;
     phoneNumberId: string;
     phone: string;
     ownerName?: string;
     listing?: string;
+    notes?: string;
     brokerName?: string;
     brokerPhone?: string;
     agencyName?: string;
@@ -39,6 +40,40 @@ export async function POST(request: NextRequest) {
   const brokerName = bn?.trim() || "váš makléř";
   const brokerPhone = bp?.trim() || "";
   const agencyName = an?.trim() || "naše realitní kancelář";
+  const ownerNameFull = ownerName?.trim() || "Majiteli";
+  const listingText = listing?.trim() || "";
+  const notesText = notes?.trim() || "";
+
+  const systemPrompt = `Jsi rychlý a přímý obchodní asistent realitní kanceláře {{agencyName}}, voláš jménem makléře {{brokerName}}.
+
+Voláš majiteli, který prodává nemovitost sám: {{listing}}
+
+{{notes}}
+
+STYL: Mluv rychle, úsečně, sebejistě. Žádné zbytečné věty. Každá věta musí mít účel.
+
+Průběh hovoru (max 90 sekund celkem):
+1. Představ se, řekni proč voláš — VŠE V JEDNÉ větě
+2. Okamžitě přejdi k nabídce — 2 věty max
+3. Zeptej se na zájem o schůzku — 1 otázka
+4. Podle odpovědi: domluv kontakt s makléřem NEBO se rozluč
+
+Co nabízíme (vyber max 2 body, nestresuj seznam):
+- Vyšší prodejní cena díky správnému ocenění a prezentaci
+- Právní servis a kompletní vyřízení — majitel nemusí nic řešit
+- Databáze prověřených kupujících
+
+ZAKÁZÁNO:
+- Chválit nemovitost nebo komentovat inzerát
+- Opakovat věci, které jsi už řekl
+- Říkat "samozřejmě", "rozumím", "určitě", "výborně" nebo podobné vycpávky
+- Věty delší než 15 slov
+
+Kdy ukončit hovor:
+- Majitel jasně odmítl → rozluč se (1 věta)
+- Majitel souhlasí → předej kontakt na {{brokerName}}{{brokerPhone}}
+- Majitel nereaguje déle než 8 sekund → ukonči hovor
+- NIKDY nezavěšuj jen proto, že majitel mlčel 1–2 sekundy nebo se ptal`;
 
   const res = await fetch("https://api.vapi.ai/call", {
     method: "POST",
@@ -52,15 +87,19 @@ export async function POST(request: NextRequest) {
       phoneNumberId,
       customer: {
         number: toE164(phone),
-        name: ownerName || "Majitel",
+        name: ownerNameFull,
       },
       assistantOverrides: {
+        model: {
+          messages: [{ role: "system", content: systemPrompt }],
+        },
         variableValues: {
-          ownerName: ownerName || "Majiteli",
-          listing: listing || "",
+          ownerName: ownerNameFull,
+          listing: listingText,
+          notes: notesText ? `POKYNY A POZNÁMKY PRO TENTO HOVOR:\n${notesText}` : "",
           phone: toE164(phone),
           brokerName,
-          brokerPhone,
+          brokerPhone: brokerPhone ? ` (${brokerPhone})` : "",
           agencyName,
         },
       },

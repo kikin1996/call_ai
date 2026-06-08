@@ -17,6 +17,7 @@ interface CallRecord {
   ownerName: string;
   listing: string;
   listingUrl: string;
+  notes: string;
   expanded: boolean;
 }
 
@@ -53,7 +54,7 @@ function loadConfig() {
 }
 
 function newRecord(): CallRecord {
-  return { id: crypto.randomUUID(), phone: "", ownerName: "", listing: "", listingUrl: "", expanded: true };
+  return { id: crypto.randomUUID(), phone: "", ownerName: "", listing: "", listingUrl: "", notes: "", expanded: false };
 }
 
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -187,7 +188,7 @@ export default function AiCallPage() {
         const r = await fetch("/api/ai-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ apiKey, assistantId, phoneNumberId, phone: rec.phone, ownerName: rec.ownerName, listing: rec.listing, brokerName, brokerPhone, agencyName }),
+          body: JSON.stringify({ apiKey, assistantId, phoneNumberId, phone: rec.phone, ownerName: rec.ownerName, listing: rec.listing, notes: rec.notes, brokerName, brokerPhone, agencyName }),
         });
         const data = await r.json();
         if (!r.ok) { updateLog(rec.id, { status: "failed", error: data.error ?? "Chyba" }); continue; }
@@ -274,41 +275,56 @@ export default function AiCallPage() {
       </Card>
 
       {/* Seznam záznamů */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Záznamy k volání</CardTitle>
-              <CardDescription className="text-xs mt-0.5">{records.length} / 10 záznamů</CardDescription>
-            </div>
-            <Button
-              type="button" variant="outline" size="sm"
-              onClick={addRecord}
-              disabled={records.length >= 10 || running}
-              className="gap-1.5"
-            >
-              <Plus className="h-3.5 w-3.5" /> Přidat
-            </Button>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Záznamy k volání</p>
+            <p className="text-xs text-muted-foreground">{records.length} / 10 záznamů</p>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {records.map((rec, idx) => (
-            <div key={rec.id} className="rounded-lg border border-border overflow-hidden">
-              {/* Záhlaví záznamu */}
+          <Button
+            type="button" variant="outline" size="sm"
+            onClick={addRecord}
+            disabled={records.length >= 10 || running}
+            className="gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" /> Přidat
+          </Button>
+        </div>
+
+        {records.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-6 border border-dashed border-border rounded-lg">
+            Žádné záznamy. Klikněte na „Přidat".
+          </p>
+        )}
+
+        {records.map((rec, idx) => {
+          const log = logs.find((l) => l.recordId === rec.id);
+          const statusMeta = log ? (STATUS_META[log.status] ?? STATUS_META.pending) : null;
+          return (
+            <div key={rec.id} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+              {/* Hlavička — kliknutelná */}
               <div
-                className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors select-none"
+                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors select-none"
                 onClick={() => updateRecord(rec.id, "expanded", !rec.expanded)}
               >
-                <span className="text-xs font-medium text-muted-foreground w-5 shrink-0">{idx + 1}.</span>
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy/10 text-xs font-bold text-navy">
+                  {idx + 1}
+                </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {rec.ownerName || rec.phone || <span className="text-muted-foreground">Nevyplněno</span>}
+                  <p className="text-sm font-semibold text-foreground truncate">
+                    {rec.ownerName || <span className="font-normal text-muted-foreground">Nevyplněno</span>}
                   </p>
-                  {rec.phone && rec.ownerName && (
-                    <p className="text-xs text-muted-foreground truncate">{rec.phone}</p>
-                  )}
+                  <p className="text-xs text-muted-foreground truncate">
+                    {rec.phone || "Bez čísla"}
+                    {rec.listing && <span className="ml-2 text-muted-foreground/60">· {rec.listing.slice(0, 40)}{rec.listing.length > 40 ? "…" : ""}</span>}
+                  </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  {statusMeta && (
+                    <span className={`flex items-center gap-1 text-[11px] font-medium ${statusMeta.color}`}>
+                      {statusMeta.icon} {statusMeta.label}
+                    </span>
+                  )}
                   {!running && (
                     <button
                       type="button"
@@ -318,13 +334,15 @@ export default function AiCallPage() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   )}
-                  {rec.expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  {rec.expanded
+                    ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                    : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                 </div>
               </div>
 
-              {/* Tělo záznamu */}
+              {/* Tělo — rozbalené */}
               {rec.expanded && (
-                <div className="px-3 pb-3 pt-1 border-t border-border bg-muted/10 space-y-3">
+                <div className="px-4 pb-4 pt-3 border-t border-border bg-muted/10 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs">Telefonní číslo *</Label>
@@ -368,84 +386,23 @@ export default function AiCallPage() {
                       disabled={running}
                     />
                   </div>
-
-                  {/* Odpověď AI asistenta */}
-                  {(() => {
-                    const log = logs.find((l) => l.recordId === rec.id);
-                    const meta = log ? (STATUS_META[log.status] ?? STATUS_META.pending) : null;
-                    return (
-                      <div className="rounded-lg border border-border bg-background overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/20">
-                          <p className="text-xs font-medium text-foreground">Odpověď AI asistenta</p>
-                          {meta && (
-                            <span className={`flex items-center gap-1 text-[11px] font-medium ${meta.color}`}>
-                              {meta.icon} {meta.label}
-                            </span>
-                          )}
-                          {log?.durationSeconds != null && (
-                            <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
-                              <Clock className="h-3 w-3" />
-                              {Math.floor(log.durationSeconds / 60)}:{String(log.durationSeconds % 60).padStart(2, "0")}
-                            </span>
-                          )}
-                        </div>
-                        <div className="p-3 min-h-[80px]">
-                          {!log || log.status === "pending" ? (
-                            <p className="text-xs text-muted-foreground italic">Odpověď se zobrazí po skončení hovoru…</p>
-                          ) : log.status === "calling" || log.status === "ringing" || log.status === "in-progress" ? (
-                            <p className="text-xs text-blue-600 flex items-center gap-1.5">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Hovor probíhá, čekám na výsledek…
-                            </p>
-                          ) : log.error ? (
-                            <p className="text-xs text-destructive">{log.error}</p>
-                          ) : (log.summary || log.shortSummary) ? (
-                            <div className="space-y-2">
-                              {log.outcome && (
-                                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${OUTCOME_META[log.outcome].color} ${OUTCOME_META[log.outcome].bg} ${OUTCOME_META[log.outcome].border}`}>
-                                  {log.outcome === "uspesny" && <CheckCircle className="h-3 w-3" />}
-                                  {log.outcome === "neutralni" && <AlertCircle className="h-3 w-3" />}
-                                  {log.outcome === "odmitnuti" && <XCircle className="h-3 w-3" />}
-                                  {OUTCOME_META[log.outcome].label}
-                                </span>
-                              )}
-                              {log.shortSummary && (
-                                <p className="text-xs text-foreground leading-relaxed">{log.shortSummary}</p>
-                              )}
-                              {log.transcript && (
-                                <details className="group">
-                                  <summary className="text-[11px] font-medium text-navy cursor-pointer select-none hover:underline">
-                                    Zobrazit přepis hovoru
-                                  </summary>
-                                  <div className="mt-1.5 rounded border border-border bg-muted/30 px-2 py-1.5 text-[11px] text-foreground whitespace-pre-wrap max-h-40 overflow-y-auto">
-                                    {log.transcript}
-                                  </div>
-                                </details>
-                              )}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground italic">
-                              {log.status === "no-answer" ? "Majitel nezvedl telefon." :
-                               log.status === "busy" ? "Linka byla obsazená." :
-                               log.status === "cancelled" ? "Hovor byl zrušen." :
-                               "Shrnutí není k dispozici."}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
+                  <div>
+                    <Label className="text-xs">Poznámky a pokyny pro AI asistenta</Label>
+                    <Textarea
+                      value={rec.notes}
+                      onChange={(e) => updateRecord(rec.id, "notes", e.target.value)}
+                      rows={3}
+                      placeholder="Např.: Majitel preferuje schůzky odpoledne. Zmiň slevu na provizi. Nezmiňuj konkurenci…"
+                      className="mt-1 text-sm resize-none"
+                      disabled={running}
+                    />
+                  </div>
                 </div>
               )}
             </div>
-          ))}
-
-          {records.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Žádné záznamy. Klikněte na „Přidat".
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          );
+        })}
+      </div>
 
       {/* Start / Stop */}
       <div className="flex gap-3">
