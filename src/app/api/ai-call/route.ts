@@ -50,12 +50,14 @@ Odpověz POUZE validním JSON (bez markdown):
   const parsed = JSON.parse(raw);
   return {
     systemPrompt: parsed.systemPrompt ?? buildFallbackPrompt({ listing, ownerName, notes }),
-    firstMessage: parsed.firstMessage ?? buildFirstMessage(ownerName, listing),
+    firstMessage: parsed.firstMessage ?? buildFirstMessage(ownerName),
   };
 }
 
-function buildFirstMessage(ownerName: string, listing: string): string {
-  return `Dobrý den, volám ohledně ${listing || "Vaší nemovitosti"} — mluvím správně s ${ownerName || "Vámi"}? Jsem AI asistent ${AGENCY_NAME}, volám se rychlou otázkou.`;
+function buildFirstMessage(ownerName: string, street?: string, city?: string): string {
+  const location = [street, city].filter(Boolean).join(" v ");
+  const about = location ? `ohledně nemovitosti na ${location}` : "ohledně Vaší nemovitosti";
+  return `Dobrý den, zdravím Vás — jsem AI asistent ${AGENCY_NAME}. Volám ${about}. Mluvím správně s ${ownerName || "Vámi"}?`;
 }
 
 function buildFallbackPrompt(p: { listing: string; ownerName: string; notes: string }): string {
@@ -90,10 +92,12 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
-  const { phone, ownerName, listing, notes, promptTemplate, firstMessageTemplate } = body as {
+  const { phone, ownerName, listing, street, city, notes, promptTemplate, firstMessageTemplate } = body as {
     phone: string;
     ownerName?: string;
     listing?: string;
+    street?: string;
+    city?: string;
     notes?: string;
     promptTemplate?: string;
     firstMessageTemplate?: string;
@@ -113,6 +117,8 @@ export async function POST(request: NextRequest) {
 
   const ownerNameFull = ownerName?.trim() || "Majiteli";
   const listingText = listing?.trim() || "";
+  const streetText = street?.trim() || "";
+  const cityText = city?.trim() || "";
   const notesText = notes?.trim() || "";
 
   const vars: Record<string, string> = {
@@ -135,7 +141,7 @@ export async function POST(request: NextRequest) {
     systemPrompt = substituteVars(promptTemplate);
     firstMessage = firstMessageTemplate?.trim()
       ? substituteVars(firstMessageTemplate)
-      : buildFirstMessage(ownerNameFull, listingText);
+      : buildFirstMessage(ownerNameFull, streetText, cityText);
   } else if (process.env.ANTHROPIC_API_KEY) {
     try {
       ({ systemPrompt, firstMessage } = await generateCallStrategy({
@@ -143,11 +149,11 @@ export async function POST(request: NextRequest) {
       }));
     } catch {
       systemPrompt = buildFallbackPrompt({ listing: listingText, ownerName: ownerNameFull, notes: notesText });
-      firstMessage = buildFirstMessage(ownerNameFull, listingText);
+      firstMessage = buildFirstMessage(ownerNameFull, streetText, cityText);
     }
   } else {
     systemPrompt = buildFallbackPrompt({ listing: listingText, ownerName: ownerNameFull, notes: notesText });
-    firstMessage = buildFirstMessage(ownerNameFull, listingText);
+    firstMessage = buildFirstMessage(ownerNameFull, streetText, cityText);
   }
 
   const res = await fetch("https://api.vapi.ai/call", {

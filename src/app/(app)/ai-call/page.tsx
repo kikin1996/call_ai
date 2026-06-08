@@ -254,7 +254,7 @@ export default function AiCallPage() {
         const r = await fetch("/api/ai-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: rec.phone, ownerName: rec.ownerName, listing: buildListing(rec), notes: rec.notes, promptTemplate, firstMessageTemplate }),
+          body: JSON.stringify({ phone: rec.phone, ownerName: rec.ownerName, listing: buildListing(rec), street: rec.street, city: rec.city, notes: rec.notes, promptTemplate, firstMessageTemplate }),
         });
         const data = await r.json();
         if (!r.ok) { updateLog(rec.id, { status: "failed", error: data.error ?? "Chyba" }); continue; }
