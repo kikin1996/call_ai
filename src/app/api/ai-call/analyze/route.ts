@@ -42,7 +42,7 @@ ${text}
 Odpověz POUZE validním JSON, žádný jiný text:
 {
   "outcome": "uspesny" nebo "neutralni" nebo "odmitnuti" nebo "zaveseni",
-  "shortSummary": "2-3 věty česky: co se stalo v hovoru a jaká byla reakce majitele."
+  "shortSummary": "MAX 2 věty česky: co se stalo a jaká byla reakce majitele. Nic víc."
 }
 
 Definice:
