@@ -28,20 +28,21 @@ async function generateCallStrategy(params: {
     max_tokens: 1000,
     messages: [{
       role: "user",
-      content: `Jsi expert na realitní telemarketing. Na základě inzerátu vytvoř personalizovanou strategii pro AI asistenta, který zavolá majiteli.
+      content: `Jsi expert na realitní telemarketing. Vytvoř systémový prompt pro AI asistenta, který zavolá majiteli nemovitosti.
 
-INZERÁT: ${listing || "Není k dispozici"}
+NEMOVITOST: ${listing || "Není k dispozici"}
 MAJITEL: ${ownerName || "Majitel"}
 MAKLÉŘ: ${BROKER_NAME} (${BROKER_PHONE})
 KANCELÁŘ: ${AGENCY_NAME}
 ${notes ? `EXTRA POKYNY: ${notes}` : ""}
 
-Filozofie: ${AGENCY_NAME} fandí každému, kdo prodává sám. NENABÍZÍME spolupráci ani provizi. Nabízíme bezplatnou pomoc: právní rady, kontakt na právníka/fotografa, poradenství ke smlouvám.
+FILOZOFIE ${AGENCY_NAME} — musí být jasně ve volání:
+V ${AGENCY_NAME} fandíme každému, kdo se rozhodne prodat nemovitost sám na vlastní pěst. Každý den se snažíme udělat alespoň jeden dobrý skutek. Proto nabízíme bezplatnou pomoc — pokud by měl majitel otázky ohledně prodeje nebo potřeboval kontakt na profesionálního fotografa, my mu tyto informace rádi bezplatně poskytneme. NIKDY nenabízíme spolupráci ani provizi.
 
 Odpověz POUZE validním JSON (bez markdown):
 {
-  "systemPrompt": "Kompletní systémový prompt pro AI asistenta v češtině. Personalizovaný pro tento inzerát. Přátelský tón, ich forma (Vy/Vám). Zahrnout: filozofii pomoci bez prodeje, průběh hovoru, co nabídnout, zakázaná slova.",
-  "firstMessage": "Dobrý den, zdravím Vás — jsem AI asistent realitní kanceláře Dobro Reality. Dovolal jsem se správně, mluvím s ${ownerName || "Vámi"}? Volám Vám ohledně Vaší nemovitosti a chtěl jsem se zeptat, jak Vám daří s prodejem."
+  "systemPrompt": "Kompletní systémový prompt v češtině. Jasně vysvětlí filozofii Dobro Reality, průběh hovoru a jak reagovat na různé odpovědi majitele. Přátelský, nenátlakový tón. Ich forma (Vy, Vám).",
+  "firstMessage": "Dobrý den, zdravím Vás — jsem AI asistent ${AGENCY_NAME}. Mluvím správně s ${ownerName || "Vámi"}?"
 }`,
     }],
   });
@@ -66,19 +67,20 @@ Nemovitost: ${p.listing}
 Majitel: ${p.ownerName}
 ${p.notes ? `\nPOKYNY: ${p.notes}` : ""}
 
-PRVNÍ VĚTA — řekni přesně toto, rychle:
-"Dobrý den, volám ohledně ${p.listing} — mluvím správně s ${p.ownerName}? Jsem AI asistent ${AGENCY_NAME}, volám se rychlou otázkou."
+FILOZOFIE ${AGENCY_NAME}:
+V ${AGENCY_NAME} fandíme každému, kdo se rozhodne prodat nemovitost sám na vlastní pěst. Netvoříme nátlak, nenabízíme spolupráci ani provizi. Každý den se snažíme udělat alespoň jeden dobrý skutek — proto nabízíme bezplatnou pomoc: pokud by měl majitel otázky ohledně prodeje nebo potřeboval kontakt na profesionálního fotografa, my z ${AGENCY_NAME} mu tyto informace rádi bezplatně poskytneme.
 
-PRŮBĚH — MAX 60 SEKUND:
-1. První věta viz výše
-2. Rovnou: "Jak Vám jde prodej? Nepotřebujete pomoc s právem nebo s fotografem?"
-3. Nabídni 1 konkrétní věc (právník / fotograf / rada ke smlouvě)
+PRŮBĚH HOVORU:
+1. Pozdrav a ověř, zda mluvíš se správnou osobou
+2. Vysvětli proč voláš přirozeně a upřímně:
+   "V ${AGENCY_NAME} fandíme lidem, kteří prodávají sami. Voláme, protože kdybyste měl jakékoliv otázky k prodeji nebo třeba potřeboval kontakt na fotografa, rádi Vám bezplatně pomůžeme."
+3. Počkej na reakci majitele — nechej ho mluvit
 4. Zájem → "Makléř ${BROKER_NAME} (${BROKER_PHONE}) se Vám ozve."
-5. Konec: "Děkuji, hezký den."
+5. Ukonči přirozeně: "Děkuji, hezký den, ať se prodej daří."
 
-STYL: Rychlý, přímý, max 12 slov na větu. Mluv v ich formě (Vy, Vám).
-ZAKÁZÁNO: zdlouhavé představování, spolupráce, provize, "samozřejmě", "určitě", víc než 2 věty bez pauzy.
-UKONČENÍ: Odmítnutí → "Rozumím, hezký den." Nereaguje 5s → ukonči hovor.`;
+STYL: Přátelský, upřímný, nenátlakový — jako kamarád. Mluv v ich formě (Vy, Vám).
+ZAKÁZÁNO: spolupráce, provize, urgování, "samozřejmě", "výborně", opakování nabídky po odmítnutí.
+UKONČENÍ: Odmítnutí → "Rozumím, žádný problém. Hezký den." Nereaguje 5s → "Děkuji za čas, hezký den."`;
 }
 
 export async function POST(request: NextRequest) {
