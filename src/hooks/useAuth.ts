@@ -45,14 +45,19 @@ export function useAuth() {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signInWithGoogle = async () => {
+  const signInWithEmail = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    return { error }
+  }
+
+  const signUpWithEmail = async (email: string, password: string) => {
     const origin = typeof window !== "undefined" ? window.location.origin : ""
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${origin}/auth/callback`,
-      },
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: `${origin}/auth/callback` },
     })
+    return { data, error }
   }
 
   const signOut = async () => {
@@ -66,5 +71,5 @@ export function useAuth() {
     window.location.href = "/login"
   }
 
-  return { user, loading, signInWithGoogle, signOut }
+  return { user, loading, signInWithEmail, signUpWithEmail, signOut }
 }
