@@ -50,41 +50,34 @@ Odpověz POUZE validním JSON (bez markdown):
   const parsed = JSON.parse(raw);
   return {
     systemPrompt: parsed.systemPrompt ?? buildFallbackPrompt({ listing, ownerName, notes }),
-    firstMessage: parsed.firstMessage ?? buildFirstMessage(ownerName),
+    firstMessage: parsed.firstMessage ?? buildFirstMessage(ownerName, listing),
   };
 }
 
-function buildFirstMessage(ownerName: string): string {
-  return `Dobrý den, zdravím Vás — jsem AI asistent realitní kanceláře ${AGENCY_NAME}. Dovolal jsem se správně, mluvím s ${ownerName || "Vámi"}? Volám Vám ohledně Vaší nemovitosti a chtěl jsem se zeptat, jak Vám daří s prodejem.`;
+function buildFirstMessage(ownerName: string, listing: string): string {
+  return `Dobrý den, volám ohledně ${listing || "Vaší nemovitosti"} — mluvím správně s ${ownerName || "Vámi"}? Jsem AI asistent ${AGENCY_NAME}, volám se rychlou otázkou.`;
 }
 
 function buildFallbackPrompt(p: { listing: string; ownerName: string; notes: string }): string {
-  return `Jsi přátelský AI asistent realitní kanceláře ${AGENCY_NAME}. Voláš majiteli, který prodává nemovitost sám.
+  return `Jsi AI asistent realitní kanceláře ${AGENCY_NAME}. Voláš majiteli, který prodává nemovitost sám.
 
 Nemovitost: ${p.listing}
 Majitel: ${p.ownerName}
 ${p.notes ? `\nPOKYNY: ${p.notes}` : ""}
 
-PRVNÍ VĚTA (přečti přesně):
-"Dobrý den, zdravím Vás — jsem AI asistent realitní kanceláře ${AGENCY_NAME}. Dovolal jsem se správně, mluvím s ${p.ownerName}? Volám Vám ohledně Vaší nemovitosti a chtěl jsem se zeptat, jak Vám daří s prodejem."
+PRVNÍ VĚTA — řekni přesně toto, rychle:
+"Dobrý den, volám ohledně ${p.listing} — mluvím správně s ${p.ownerName}? Jsem AI asistent ${AGENCY_NAME}, volám se rychlou otázkou."
 
-FILOZOFIE HOVORU:
-V ${AGENCY_NAME} fandíme každému, kdo prodává sám. NENABÍZÍME spolupráci ani provizi. Nabízíme bezplatnou pomoc:
-- Odborná rada k právním náležitostem převodu
-- Kontakt na prověřeného právníka ve vašem městě
-- Kontakt na profesionálního realitního fotografa ve vašem kraji
-- Poradenství ke správnému postupu uzavření realitních smluv
+PRŮBĚH — MAX 60 SEKUND:
+1. První věta viz výše
+2. Rovnou: "Jak Vám jde prodej? Nepotřebujete pomoc s právem nebo s fotografem?"
+3. Nabídni 1 konkrétní věc (právník / fotograf / rada ke smlouvě)
+4. Zájem → "Makléř ${BROKER_NAME} (${BROKER_PHONE}) se Vám ozve."
+5. Konec: "Děkuji, hezký den."
 
-PRŮBĚH HOVORU:
-1. Přivítání + ověření správné osoby (viz první věta)
-2. Zeptej se jak jim jde prodej — vyslechni odpověď
-3. Nabídni konkrétní bezplatnou pomoc (max 2 věci)
-4. Pokud mají zájem → makléř ${BROKER_NAME} (${BROKER_PHONE}) se ozve
-5. Rozluč se: "Děkujeme, ${AGENCY_NAME} — jsme tady, abychom šířili dobré skutky."
-
-STYL: Přátelský, upřímný, pomalý — ne prodejní. Mluv v ich formě (Vy, Vám). Naslouchej.
-ZAKÁZÁNO: nabízet spolupráci, provizi, tlačit na schůzku, říkat "samozřejmě", "určitě", "výborně".
-UKONČENÍ: Majitel nemá zájem → poděkuj, rozluč se. Nereaguje 8s → ukonči hovor.`;
+STYL: Rychlý, přímý, max 12 slov na větu. Mluv v ich formě (Vy, Vám).
+ZAKÁZÁNO: zdlouhavé představování, spolupráce, provize, "samozřejmě", "určitě", víc než 2 věty bez pauzy.
+UKONČENÍ: Odmítnutí → "Rozumím, hezký den." Nereaguje 5s → ukonči hovor.`;
 }
 
 export async function POST(request: NextRequest) {
@@ -142,7 +135,7 @@ export async function POST(request: NextRequest) {
     systemPrompt = substituteVars(promptTemplate);
     firstMessage = firstMessageTemplate?.trim()
       ? substituteVars(firstMessageTemplate)
-      : buildFirstMessage(ownerNameFull);
+      : buildFirstMessage(ownerNameFull, listingText);
   } else if (process.env.ANTHROPIC_API_KEY) {
     try {
       ({ systemPrompt, firstMessage } = await generateCallStrategy({
@@ -150,11 +143,11 @@ export async function POST(request: NextRequest) {
       }));
     } catch {
       systemPrompt = buildFallbackPrompt({ listing: listingText, ownerName: ownerNameFull, notes: notesText });
-      firstMessage = buildFirstMessage(ownerNameFull);
+      firstMessage = buildFirstMessage(ownerNameFull, listingText);
     }
   } else {
     systemPrompt = buildFallbackPrompt({ listing: listingText, ownerName: ownerNameFull, notes: notesText });
-    firstMessage = buildFirstMessage(ownerNameFull);
+    firstMessage = buildFirstMessage(ownerNameFull, listingText);
   }
 
   const res = await fetch("https://api.vapi.ai/call", {
