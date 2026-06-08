@@ -12,11 +12,31 @@ import {
   ChevronDown, ChevronUp, PhoneCall, Clock, Plus, Trash2, Play, Square, Wand2,
 } from "lucide-react";
 
+type PropertyType = "byt" | "dum";
+type PropertyCondition = "pred_rekonstrukci" | "po_rekonstrukci" | "novostavba" | "pekny_stav";
+
+const CONDITION_LABELS: Record<PropertyCondition, string> = {
+  pred_rekonstrukci: "Před rekonstrukcí",
+  po_rekonstrukci:   "Po rekonstrukci",
+  novostavba:        "Novostavba",
+  pekny_stav:        "Pěkný stav",
+};
+
+function buildListing(rec: { propertyType: PropertyType; street: string; city: string; condition: PropertyCondition }): string {
+  const type = rec.propertyType === "byt" ? "Byt" : "Dům";
+  const location = [rec.street, rec.city].filter(Boolean).join(", ");
+  const cond = CONDITION_LABELS[rec.condition];
+  return [type, location, cond].filter(Boolean).join(" — ");
+}
+
 interface CallRecord {
   id: string;
   phone: string;
   ownerName: string;
-  listing: string;
+  propertyType: PropertyType;
+  street: string;
+  city: string;
+  condition: PropertyCondition;
   listingUrl: string;
   notes: string;
   shouldCall: boolean;
@@ -90,7 +110,7 @@ function loadConfig() {
 }
 
 function newRecord(): CallRecord {
-  return { id: crypto.randomUUID(), phone: "", ownerName: "", listing: "", listingUrl: "", notes: "", shouldCall: true, expanded: false };
+  return { id: crypto.randomUUID(), phone: "", ownerName: "", propertyType: "byt", street: "", city: "", condition: "pekny_stav", listingUrl: "", notes: "", shouldCall: true, expanded: false };
 }
 
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -234,7 +254,7 @@ export default function AiCallPage() {
         const r = await fetch("/api/ai-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: rec.phone, ownerName: rec.ownerName, listing: rec.listing, notes: rec.notes, promptTemplate, firstMessageTemplate }),
+          body: JSON.stringify({ phone: rec.phone, ownerName: rec.ownerName, listing: buildListing(rec), notes: rec.notes, promptTemplate, firstMessageTemplate }),
         });
         const data = await r.json();
         if (!r.ok) { updateLog(rec.id, { status: "failed", error: data.error ?? "Chyba" }); continue; }
@@ -397,7 +417,7 @@ export default function AiCallPage() {
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
                     {rec.phone || "Bez čísla"}
-                    {rec.listing && <span className="ml-2 text-muted-foreground/60">· {rec.listing.slice(0, 40)}{rec.listing.length > 40 ? "…" : ""}</span>}
+                    {(rec.street || rec.city) && <span className="ml-2 text-muted-foreground/60">· {buildListing(rec).slice(0, 45)}{buildListing(rec).length > 45 ? "…" : ""}</span>}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -446,6 +466,67 @@ export default function AiCallPage() {
                       />
                     </div>
                   </div>
+                  {/* Typ nemovitosti */}
+                  <div>
+                    <Label className="text-xs">Typ nemovitosti</Label>
+                    <div className="flex gap-2 mt-1">
+                      {(["byt", "dum"] as PropertyType[]).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          disabled={running}
+                          onClick={() => updateRecord(rec.id, "propertyType", t)}
+                          className={`flex-1 py-1.5 text-sm font-medium rounded-lg border transition-colors ${rec.propertyType === t ? "bg-navy text-white border-navy" : "bg-background text-foreground border-border hover:bg-muted/50"}`}
+                        >
+                          {t === "byt" ? "🏢 Byt" : "🏠 Dům"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Ulice a město */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Ulice</Label>
+                      <Input
+                        value={rec.street}
+                        onChange={(e) => updateRecord(rec.id, "street", e.target.value)}
+                        placeholder="Václavské náměstí 1"
+                        className="mt-1 h-8 text-sm"
+                        disabled={running}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Město</Label>
+                      <Input
+                        value={rec.city}
+                        onChange={(e) => updateRecord(rec.id, "city", e.target.value)}
+                        placeholder="Praha"
+                        className="mt-1 h-8 text-sm"
+                        disabled={running}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Stav nemovitosti */}
+                  <div>
+                    <Label className="text-xs">Stav nemovitosti</Label>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      {(Object.entries(CONDITION_LABELS) as [PropertyCondition, string][]).map(([val, label]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          disabled={running}
+                          onClick={() => updateRecord(rec.id, "condition", val)}
+                          className={`py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors text-left ${rec.condition === val ? "bg-navy text-white border-navy" : "bg-background text-foreground border-border hover:bg-muted/50"}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* URL inzerátu */}
                   <div>
                     <Label className="text-xs">URL inzerátu</Label>
                     <Input
@@ -453,17 +534,6 @@ export default function AiCallPage() {
                       onChange={(e) => updateRecord(rec.id, "listingUrl", e.target.value)}
                       placeholder="https://www.sreality.cz/…"
                       className="mt-1 h-8 text-sm"
-                      disabled={running}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Popis nemovitosti (pro AI asistenta)</Label>
-                    <Textarea
-                      value={rec.listing}
-                      onChange={(e) => updateRecord(rec.id, "listing", e.target.value)}
-                      rows={3}
-                      placeholder="Prodej bytu 3+1, 80m², Praha 6, 6 500 000 Kč…"
-                      className="mt-1 text-sm resize-none"
                       disabled={running}
                     />
                   </div>
