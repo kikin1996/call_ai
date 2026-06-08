@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-export type CallOutcome = "uspesny" | "neutralni" | "odmitnuti";
+export type CallOutcome = "uspesny" | "neutralni" | "odmitnuti" | "zaveseni";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -12,12 +12,12 @@ export async function POST(request: NextRequest) {
   };
   const text = [summary, transcript].filter(Boolean).join("\n\n---\n\n");
 
-  // Bez přepisu — odvodit výsledek ze statusu hovoru
+  // Bez přepisu — odvodit výsledek ze statusu
   if (!text) {
     if (status === "no-answer") return NextResponse.json({ outcome: "neutralni" as CallOutcome, shortSummary: "Majitel telefon nezvedl." });
-    if (status === "busy") return NextResponse.json({ outcome: "neutralni" as CallOutcome, shortSummary: "Linka byla obsazená." });
+    if (status === "busy")      return NextResponse.json({ outcome: "neutralni" as CallOutcome, shortSummary: "Linka byla obsazená." });
     if (status === "cancelled") return NextResponse.json({ outcome: "neutralni" as CallOutcome, shortSummary: "Hovor byl zrušen před spojením." });
-    if (endedReason === "customer-ended-call") return NextResponse.json({ outcome: "odmitnuti" as CallOutcome, shortSummary: "Majitel hovor předčasně ukončil." });
+    if (endedReason === "customer-ended-call") return NextResponse.json({ outcome: "zaveseni" as CallOutcome, shortSummary: "Majitel hovor zavěsil." });
     return NextResponse.json({ outcome: "neutralni" as CallOutcome, shortSummary: "Přepis hovoru není k dispozici." });
   }
 
@@ -31,33 +31,35 @@ export async function POST(request: NextRequest) {
   try {
     const response = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 300,
+      max_tokens: 400,
       messages: [{
         role: "user",
-        content: `Analyzuj přepis realitního telefonního hovoru. Asistent oslovoval majitele nemovitosti s nabídkou spolupráce realitní kanceláře.
+        content: `Analyzuj přepis telefonního hovoru. AI asistent z realitní kanceláře Dobro Reality volal majiteli nemovitosti a nabízel bezplatnou pomoc (právník, fotograf, rady ke smlouvám).
 
 Přepis:
 ${text}
 
-Odpověz POUZE validním JSON objektem, žádný jiný text:
+Odpověz POUZE validním JSON, žádný jiný text:
 {
-  "outcome": "uspesny" nebo "neutralni" nebo "odmitnuti",
-  "shortSummary": "Přesně dvě věty v češtině: 1) co se v hovoru stalo, 2) jaký byl výsledek nebo reakce majitele."
+  "outcome": "uspesny" nebo "neutralni" nebo "odmitnuti" nebo "zaveseni",
+  "shortSummary": "2-3 věty česky: co se stalo v hovoru a jaká byla reakce majitele."
 }
 
-Definice výsledků:
-- "uspesny" = majitel projevil zájem, souhlasil se schůzkou nebo dalším kontaktem
-- "neutralni" = majitel byl nerozhodný, požádal o čas, nebo hovor skončil bez jasného závěru
-- "odmitnuti" = majitel jasně odmítl spolupráci
+Definice:
+- "uspesny" = majitel projevil zájem, chce poradit nebo mu zavolá makléř
+- "neutralni" = majitel byl nerozhodný, požádal o čas, hovor skončil bez závěru
+- "odmitnuti" = majitel jasně odmítl, nemá zájem
+- "zaveseni" = majitel zavěsil nebo hovor ukončil předčasně bez vysvětlení
 
-Pokud přepis není ideální, shrň co nejvíce z dostupného textu. Vždy vrať neprázdný shortSummary.`,
+Vždy vrať neprázdný shortSummary.`,
       }],
     });
 
     const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "";
     const parsed = JSON.parse(raw);
+    const validOutcomes: CallOutcome[] = ["uspesny", "neutralni", "odmitnuti", "zaveseni"];
     return NextResponse.json({
-      outcome: (["uspesny", "neutralni", "odmitnuti"].includes(parsed.outcome) ? parsed.outcome : "neutralni") as CallOutcome,
+      outcome: (validOutcomes.includes(parsed.outcome) ? parsed.outcome : "neutralni") as CallOutcome,
       shortSummary: parsed.shortSummary ?? summary ?? "Shrnutí není k dispozici.",
     });
   } catch {

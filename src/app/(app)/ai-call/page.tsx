@@ -23,7 +23,7 @@ interface CallRecord {
   expanded: boolean;
 }
 
-type CallOutcome = "uspesny" | "neutralni" | "odmitnuti";
+type CallOutcome = "uspesny" | "neutralni" | "odmitnuti" | "zaveseni";
 
 interface CallLog {
   recordId: string;
@@ -41,10 +41,11 @@ interface CallLog {
   listingUrl: string;
 }
 
-const OUTCOME_META: Record<CallOutcome, { label: string; color: string; bg: string; border: string }> = {
-  uspesny:   { label: "Úspěšný",  color: "text-emerald-700", bg: "bg-emerald-50",  border: "border-emerald-200" },
-  neutralni: { label: "Neutrální", color: "text-amber-700",   bg: "bg-amber-50",    border: "border-amber-200" },
-  odmitnuti: { label: "Odmítnutí", color: "text-red-700",     bg: "bg-red-50",      border: "border-red-200" },
+const OUTCOME_META: Record<CallOutcome, { label: string; color: string; bg: string; border: string; icon: string }> = {
+  uspesny:   { label: "Úspěšný",          color: "text-emerald-700", bg: "bg-emerald-50",  border: "border-emerald-200", icon: "✅" },
+  neutralni: { label: "Neutrální",         color: "text-amber-700",   bg: "bg-amber-50",    border: "border-amber-200",   icon: "➖" },
+  odmitnuti: { label: "Odmítnutí",         color: "text-red-700",     bg: "bg-red-50",      border: "border-red-200",     icon: "❌" },
+  zaveseni:  { label: "Zavěšení hovoru",   color: "text-orange-700",  bg: "bg-orange-50",   border: "border-orange-200",  icon: "📵" },
 };
 
 const STORAGE_KEY = "renote_ai_call_config";
@@ -548,34 +549,35 @@ export default function AiCallPage() {
                     </span>
                   </div>
 
-                  {log.outcome && (
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${OUTCOME_META[log.outcome].color} ${OUTCOME_META[log.outcome].bg} ${OUTCOME_META[log.outcome].border}`}>
-                      {log.outcome === "uspesny" && <CheckCircle className="h-3 w-3" />}
-                      {log.outcome === "neutralni" && <AlertCircle className="h-3 w-3" />}
-                      {log.outcome === "odmitnuti" && <XCircle className="h-3 w-3" />}
-                      {OUTCOME_META[log.outcome].label}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {log.outcome && (
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border ${OUTCOME_META[log.outcome].color} ${OUTCOME_META[log.outcome].bg} ${OUTCOME_META[log.outcome].border}`}>
+                        {OUTCOME_META[log.outcome].icon} {OUTCOME_META[log.outcome].label}
+                      </span>
+                    )}
+                    {log.durationSeconds != null && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {Math.floor(log.durationSeconds / 60)}:{String(log.durationSeconds % 60).padStart(2, "0")} min
+                      </span>
+                    )}
+                  </div>
 
                   {log.error && (
                     <p className="text-xs text-destructive bg-destructive/10 rounded px-2 py-1">{log.error}</p>
                   )}
 
-                  {log.durationSeconds != null && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {Math.floor(log.durationSeconds / 60)}:{String(log.durationSeconds % 60).padStart(2, "0")} min
-                      {log.endedReason && <span className="ml-1">· {log.endedReason}</span>}
-                    </p>
+                  {log.shortSummary && (
+                    <div className={`rounded-lg border px-3 py-2.5 ${log.outcome ? `${OUTCOME_META[log.outcome].bg} ${OUTCOME_META[log.outcome].border}` : "bg-muted/30 border-border"}`}>
+                      <p className="text-xs font-semibold text-foreground mb-1">Shrnutí hovoru</p>
+                      <p className="text-sm text-foreground leading-relaxed">{log.shortSummary}</p>
+                    </div>
                   )}
 
-                  {log.shortSummary && (
-                    <div>
-                      <p className="text-xs font-medium text-foreground mb-1">Shrnutí</p>
-                      <div className="rounded border border-border bg-muted/30 px-2.5 py-2 text-xs text-foreground leading-relaxed">
-                        {log.shortSummary}
-                      </div>
-                    </div>
+                  {!log.shortSummary && DONE_STATUSES.includes(log.status) && !log.error && (
+                    <p className="text-xs text-muted-foreground italic flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Generuji shrnutí…
+                    </p>
                   )}
 
                   {log.transcript && (
