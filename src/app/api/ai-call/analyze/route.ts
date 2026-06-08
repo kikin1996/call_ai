@@ -63,6 +63,14 @@ Vždy vrať neprázdný shortSummary.`,
       shortSummary: parsed.shortSummary ?? summary ?? "Shrnutí není k dispozici.",
     });
   } catch {
-    return NextResponse.json({ outcome: "neutralni" as CallOutcome, shortSummary: summary ?? "Shrnutí není k dispozici." });
+    const fallbackSummary = summary ?? extractFallbackSummary(transcript);
+    return NextResponse.json({ outcome: "neutralni" as CallOutcome, shortSummary: fallbackSummary });
   }
+}
+
+function extractFallbackSummary(transcript: string | undefined): string {
+  if (!transcript) return "Přepis hovoru nebyl k dispozici.";
+  const lines = transcript.split("\n").filter((l) => l.trim().length > 5).slice(0, 6);
+  if (lines.length === 0) return "Hovor proběhl, přepis je prázdný.";
+  return "Přepis hovoru:\n" + lines.join("\n");
 }

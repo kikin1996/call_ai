@@ -69,6 +69,7 @@ const OUTCOME_META: Record<CallOutcome, { label: string; color: string; bg: stri
 };
 
 const STORAGE_KEY = "renote_ai_call_config";
+const PROMPT_VERSION = "v3";
 
 const DEFAULT_PROMPT = `Jsi AI asistent realitní kanceláře Dobro Reality. Voláš majiteli, který prodává nemovitost sám.
 
@@ -85,7 +86,7 @@ PRŮBĚH HOVORU:
 2. Vysvětli PROČ voláš — přirozeně a upřímně:
    "V Dobro Reality fandíme lidem, kteří prodávají sami. Voláme, protože kdybyste měl jakékoliv otázky k prodeji nebo třeba potřeboval kontakt na fotografa, rádi Vám bezplatně pomůžeme."
 3. Počkej na reakci — nepospíchej, nech majitele mluvit
-4. Pokud projeví zájem → "Makléř Kristián Karas (+420 777 726 001) se Vám ozve, případně mi řekněte, s čím potřebujete pomoct."
+4. Pokud projeví zájem → "Makléř Kristián Karas se Vám ozve a poradí." — NEČTI telefonní číslo nahlas, makléř zavolá sám
 5. Ukonči přirozeně: "Děkuji, hezký den, ať se prodej daří."
 
 STYL:
@@ -128,9 +129,10 @@ const DONE_STATUSES = ["ended", "failed", "no-answer", "busy", "cancelled"];
 
 export default function AiCallPage() {
   const cfg = loadConfig();
+  const isOutdatedPrompt = cfg.promptVersion !== PROMPT_VERSION;
   const [promptOpen, setPromptOpen] = useState(false);
-  const [promptTemplate, setPromptTemplate] = useState<string>(cfg.promptTemplate ?? DEFAULT_PROMPT);
-  const [firstMessageTemplate, setFirstMessageTemplate] = useState<string>(cfg.firstMessageTemplate ?? "");
+  const [promptTemplate, setPromptTemplate] = useState<string>(isOutdatedPrompt ? DEFAULT_PROMPT : (cfg.promptTemplate ?? DEFAULT_PROMPT));
+  const [firstMessageTemplate, setFirstMessageTemplate] = useState<string>(isOutdatedPrompt ? "" : (cfg.firstMessageTemplate ?? ""));
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
 
   const [records, setRecords] = useState<CallRecord[]>([newRecord()]);
@@ -140,7 +142,7 @@ export default function AiCallPage() {
   const abortRef = useRef(false);
 
   const savePrompt = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...cfg, promptTemplate, firstMessageTemplate }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...cfg, promptTemplate, firstMessageTemplate, promptVersion: PROMPT_VERSION }));
   };
 
   const handleGeneratePrompt = async () => {
