@@ -55,8 +55,7 @@ Odpověz POUZE validním JSON (bez markdown):
 }
 
 function buildFirstMessage(ownerName: string, street?: string, city?: string): string {
-  const location = [street, city].filter(Boolean).join(" v ");
-  const about = location ? `ohledně nemovitosti na ${location}` : "ohledně Vaší nemovitosti";
+  const about = street ? `ohledně nemovitosti na ${street}` : city ? `ohledně nemovitosti v ${city}` : "ohledně Vaší nemovitosti";
   return `Dobrý den, zdravím Vás — jsem AI asistent ${AGENCY_NAME}. Volám ${about}. Mluvím správně s ${ownerName || "Vámi"}?`;
 }
 
