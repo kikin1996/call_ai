@@ -11,8 +11,8 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const apiKey = request.nextUrl.searchParams.get("apiKey");
-  if (!apiKey) return NextResponse.json({ error: "Chybí apiKey" }, { status: 400 });
+  const apiKey = process.env.VAPI_API_KEY;
+  if (!apiKey) return NextResponse.json({ error: "VAPI_API_KEY není nastaven" }, { status: 500 });
 
   const res = await fetch(`https://api.vapi.ai/call/${params.callId}`, {
     headers: { Authorization: `Bearer ${apiKey}` },

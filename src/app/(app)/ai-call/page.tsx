@@ -116,14 +116,6 @@ const DONE_STATUSES = ["ended", "failed", "no-answer", "busy", "cancelled"];
 
 export default function AiCallPage() {
   const cfg = loadConfig();
-  const [configOpen, setConfigOpen] = useState(!cfg.apiKey);
-  const [apiKey, setApiKey] = useState(cfg.apiKey ?? "");
-  const [assistantId, setAssistantId] = useState(cfg.assistantId ?? "");
-  const [phoneNumberId, setPhoneNumberId] = useState(cfg.phoneNumberId ?? "");
-  const [brokerName, setBrokerName] = useState(cfg.brokerName ?? "");
-  const [brokerPhone, setBrokerPhone] = useState(cfg.brokerPhone ?? "");
-  const [agencyName, setAgencyName] = useState(cfg.agencyName ?? "Dobro Reality");
-
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptTemplate, setPromptTemplate] = useState<string>(cfg.promptTemplate ?? DEFAULT_PROMPT);
   const [firstMessageTemplate, setFirstMessageTemplate] = useState<string>(cfg.firstMessageTemplate ?? "");
@@ -135,9 +127,8 @@ export default function AiCallPage() {
   const [currentIdx, setCurrentIdx] = useState<number | null>(null);
   const abortRef = useRef(false);
 
-  const saveConfig = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiKey, assistantId, phoneNumberId, brokerName, brokerPhone, agencyName, promptTemplate, firstMessageTemplate }));
-    setConfigOpen(false);
+  const savePrompt = () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...cfg, promptTemplate, firstMessageTemplate }));
   };
 
   const handleGeneratePrompt = async () => {
@@ -146,7 +137,7 @@ export default function AiCallPage() {
       const r = await fetch("/api/ai-call/generate-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brokerName, brokerPhone, agencyName }),
+        body: JSON.stringify({}),
       });
       const data = await r.json();
       if (data.systemPrompt) setPromptTemplate(data.systemPrompt);
@@ -177,7 +168,7 @@ export default function AiCallPage() {
       const iv = setInterval(async () => {
         if (abortRef.current) { clearInterval(iv); resolve(); return; }
         try {
-          const r = await fetch(`/api/ai-call/${callId}?apiKey=${encodeURIComponent(apiKey)}`);
+          const r = await fetch(`/api/ai-call/${callId}`);
           const data = await r.json();
           updateLog(recordId, {
             status: data.status,
@@ -196,7 +187,7 @@ export default function AiCallPage() {
               for (let attempt = 0; attempt < 4; attempt++) {
                 await new Promise((r) => setTimeout(r, 4000));
                 try {
-                  const retry = await fetch(`/api/ai-call/${callId}?apiKey=${encodeURIComponent(apiKey)}`);
+                  const retry = await fetch(`/api/ai-call/${callId}`);
                   const retryData = await retry.json();
                   if (retryData.summary) summary = retryData.summary;
                   if (retryData.transcript) transcript = retryData.transcript;
@@ -231,7 +222,6 @@ export default function AiCallPage() {
   const handleStart = async () => {
     const valid = records.filter((r) => r.phone.trim() && r.shouldCall);
     if (!valid.length) return;
-    if (!apiKey || !assistantId || !phoneNumberId) { setConfigOpen(true); return; }
 
     abortRef.current = false;
     setRunning(true);
@@ -251,7 +241,7 @@ export default function AiCallPage() {
         const r = await fetch("/api/ai-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ apiKey, assistantId, phoneNumberId, phone: rec.phone, ownerName: rec.ownerName, listing: rec.listing, notes: rec.notes, brokerName, brokerPhone, agencyName, promptTemplate, firstMessageTemplate }),
+          body: JSON.stringify({ phone: rec.phone, ownerName: rec.ownerName, listing: rec.listing, notes: rec.notes, promptTemplate, firstMessageTemplate }),
         });
         const data = await r.json();
         if (!r.ok) { updateLog(rec.id, { status: "failed", error: data.error ?? "Chyba" }); continue; }
@@ -268,7 +258,6 @@ export default function AiCallPage() {
 
   const handleStop = () => { abortRef.current = true; };
 
-  const configValid = !!(apiKey && assistantId && phoneNumberId);
   const hasValidRecords = records.some((r) => r.phone.trim() && r.shouldCall);
 
   return (
@@ -281,61 +270,6 @@ export default function AiCallPage() {
           Přidejte záznamy s čísly majitelů a spusťte hromadné volání.
         </p>
       </div>
-
-      {/* VAPI konfigurace */}
-      <Card>
-        <CardHeader className="pb-3 cursor-pointer select-none" onClick={() => setConfigOpen((v) => !v)}>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              VAPI konfigurace
-              {configValid && (
-                <span className="text-[11px] font-normal text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Uloženo</span>
-              )}
-            </CardTitle>
-            {configOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-          </div>
-          {!configOpen && <CardDescription className="text-xs">Klikněte pro zobrazení / úpravu</CardDescription>}
-        </CardHeader>
-        {configOpen && (
-          <CardContent className="space-y-3">
-            <div>
-              <Label htmlFor="apiKey">VAPI API klíč</Label>
-              <Input id="apiKey" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="vapi_..." className="mt-1" />
-            </div>
-            <div>
-              <Label htmlFor="assistantId">Assistant ID</Label>
-              <Input id="assistantId" value={assistantId} onChange={(e) => setAssistantId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="mt-1" />
-            </div>
-            <div>
-              <Label htmlFor="phoneNumberId">Phone Number ID</Label>
-              <Input id="phoneNumberId" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="mt-1" />
-            </div>
-
-            <div className="pt-1 border-t border-border">
-              <p className="text-xs font-medium text-foreground mt-3 mb-1">Údaje makléře (proměnné pro asistenta)</p>
-              <p className="text-[11px] text-muted-foreground mb-2">
-                Předají se do hovoru jako <code className="bg-muted px-1 rounded">brokerName</code>,{" "}
-                <code className="bg-muted px-1 rounded">brokerPhone</code> a{" "}
-                <code className="bg-muted px-1 rounded">agencyName</code>.
-              </p>
-            </div>
-            <div>
-              <Label htmlFor="brokerName">Jméno makléře</Label>
-              <Input id="brokerName" value={brokerName} onChange={(e) => setBrokerName(e.target.value)} placeholder="Jan Novák" className="mt-1" />
-            </div>
-            <div>
-              <Label htmlFor="brokerPhone">Telefon makléře</Label>
-              <Input id="brokerPhone" value={brokerPhone} onChange={(e) => setBrokerPhone(e.target.value)} placeholder="+420 777 888 999" className="mt-1" />
-            </div>
-            <div>
-              <Label htmlFor="agencyName">Název realitní kanceláře</Label>
-              <Input id="agencyName" value={agencyName} onChange={(e) => setAgencyName(e.target.value)} placeholder="Reality Praha" className="mt-1" />
-            </div>
-
-            <Button type="button" variant="navy" size="sm" onClick={saveConfig}>Uložit konfiguraci</Button>
-          </CardContent>
-        )}
-      </Card>
 
       {/* Prompt asistenta */}
       <Card>
@@ -384,9 +318,7 @@ export default function AiCallPage() {
                 className="mt-1 text-sm"
               />
             </div>
-            <Button type="button" variant="navy" size="sm" onClick={() => {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiKey, assistantId, phoneNumberId, brokerName, brokerPhone, agencyName, promptTemplate, firstMessageTemplate }));
-            }}>Uložit prompt</Button>
+            <Button type="button" variant="navy" size="sm" onClick={savePrompt}>Uložit prompt</Button>
           </CardContent>
         )}
       </Card>
@@ -539,7 +471,7 @@ export default function AiCallPage() {
             type="button"
             variant="navy"
             className="flex-1 gap-2"
-            disabled={!hasValidRecords || !configValid}
+            disabled={!hasValidRecords}
             onClick={handleStart}
           >
             <Play className="h-4 w-4" />

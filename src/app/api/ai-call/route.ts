@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
 import Anthropic from "@anthropic-ai/sdk";
 
+const BROKER_NAME = "Kristián Karas";
+const BROKER_PHONE = "+420 777 726 001";
+const AGENCY_NAME = "Dobro Reality";
+
 function toE164(phone: string): string {
   let n = phone.replace(/[\s\-().]/g, "");
   if (n.startsWith("00")) n = "+" + n.slice(2);
@@ -13,12 +17,9 @@ function toE164(phone: string): string {
 async function generateCallStrategy(params: {
   listing: string;
   ownerName: string;
-  brokerName: string;
-  brokerPhone: string;
-  agencyName: string;
   notes: string;
 }): Promise<{ systemPrompt: string; firstMessage: string }> {
-  const { listing, ownerName, brokerName, brokerPhone, agencyName, notes } = params;
+  const { listing, ownerName, notes } = params;
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -31,14 +32,16 @@ async function generateCallStrategy(params: {
 
 INZERÁT: ${listing || "Není k dispozici"}
 MAJITEL: ${ownerName || "Majitel"}
-MAKLÉŘ: ${brokerName}${brokerPhone ? ` (${brokerPhone})` : ""}
-KANCELÁŘ: ${agencyName}
+MAKLÉŘ: ${BROKER_NAME} (${BROKER_PHONE})
+KANCELÁŘ: ${AGENCY_NAME}
 ${notes ? `EXTRA POKYNY: ${notes}` : ""}
+
+Filozofie: ${AGENCY_NAME} fandí každému, kdo prodává sám. NENABÍZÍME spolupráci ani provizi. Nabízíme bezplatnou pomoc: právní rady, kontakt na právníka/fotografa, poradenství ke smlouvám.
 
 Odpověz POUZE validním JSON (bez markdown):
 {
-  "systemPrompt": "Kompletní systémový prompt pro AI asistenta v češtině. Musí obsahovat: roli asistenta, kontext inzerátu, styl komunikace (rychlý, úsečný, sebejistý, max 15 slov na větu), průběh hovoru (max 90s), co nabídnout, co je zakázáno, kdy ukončit. Vše personalizované pro tento konkrétní inzerát.",
-  "firstMessage": "První věta kterou asistent řekne — představení + důvod volání v JEDNÉ větě, max 20 slov, přirozené, bez 'Dobrý den' na začátku"
+  "systemPrompt": "Kompletní systémový prompt pro AI asistenta v češtině. Personalizovaný pro tento inzerát. Přátelský tón, ich forma (Vy/Vám). Zahrnout: filozofii pomoci bez prodeje, průběh hovoru, co nabídnout, zakázaná slova.",
+  "firstMessage": "Dobrý den, zdravím Vás — jsem AI asistent realitní kanceláře Dobro Reality. Dovolal jsem se správně, mluvím s ${ownerName || "Vámi"}? Volám Vám ohledně Vaší nemovitosti a chtěl jsem se zeptat, jak Vám daří s prodejem."
 }`,
     }],
   });
@@ -46,23 +49,27 @@ Odpověz POUZE validním JSON (bez markdown):
   const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "{}";
   const parsed = JSON.parse(raw);
   return {
-    systemPrompt: parsed.systemPrompt ?? buildFallbackPrompt(params),
-    firstMessage: parsed.firstMessage ?? `Dobrý den, volám z kanceláře ${agencyName} jménem makléře ${brokerName} — zajímáme se o vaši nemovitost a rádi bychom vám nabídli spolupráci.`,
+    systemPrompt: parsed.systemPrompt ?? buildFallbackPrompt({ listing, ownerName, notes }),
+    firstMessage: parsed.firstMessage ?? buildFirstMessage(ownerName),
   };
 }
 
-function buildFallbackPrompt(p: { listing: string; ownerName: string; brokerName: string; brokerPhone: string; agencyName: string; notes: string }): string {
-  return `Jsi přátelský AI asistent realitní kanceláře Dobro Reality. Voláš majiteli, který prodává nemovitost sám.
+function buildFirstMessage(ownerName: string): string {
+  return `Dobrý den, zdravím Vás — jsem AI asistent realitní kanceláře ${AGENCY_NAME}. Dovolal jsem se správně, mluvím s ${ownerName || "Vámi"}? Volám Vám ohledně Vaší nemovitosti a chtěl jsem se zeptat, jak Vám daří s prodejem.`;
+}
+
+function buildFallbackPrompt(p: { listing: string; ownerName: string; notes: string }): string {
+  return `Jsi přátelský AI asistent realitní kanceláře ${AGENCY_NAME}. Voláš majiteli, který prodává nemovitost sám.
 
 Nemovitost: ${p.listing}
 Majitel: ${p.ownerName}
 ${p.notes ? `\nPOKYNY: ${p.notes}` : ""}
 
 PRVNÍ VĚTA (přečti přesně):
-"Dobrý den, zdravím Vás — jsem AI asistent realitní kanceláře Dobro Reality. Dovolal jsem se správně, mluvím s ${p.ownerName}? Volám Vám ohledně Vaší nemovitosti a chtěl jsem se zeptat, jak Vám daří s prodejem."
+"Dobrý den, zdravím Vás — jsem AI asistent realitní kanceláře ${AGENCY_NAME}. Dovolal jsem se správně, mluvím s ${p.ownerName}? Volám Vám ohledně Vaší nemovitosti a chtěl jsem se zeptat, jak Vám daří s prodejem."
 
 FILOZOFIE HOVORU:
-V Dobro Reality fandíme každému, kdo prodává sám. NENABÍZÍME spolupráci ani provizi. Nabízíme bezplatnou pomoc:
+V ${AGENCY_NAME} fandíme každému, kdo prodává sám. NENABÍZÍME spolupráci ani provizi. Nabízíme bezplatnou pomoc:
 - Odborná rada k právním náležitostem převodu
 - Kontakt na prověřeného právníka ve vašem městě
 - Kontakt na profesionálního realitního fotografa ve vašem kraji
@@ -72,11 +79,11 @@ PRŮBĚH HOVORU:
 1. Přivítání + ověření správné osoby (viz první věta)
 2. Zeptej se jak jim jde prodej — vyslechni odpověď
 3. Nabídni konkrétní bezplatnou pomoc (max 2 věci)
-4. Pokud mají zájem → makléř ${p.brokerName}${p.brokerPhone ? ` (${p.brokerPhone})` : ""} se ozve
-5. Rozluč se: "Děkujeme, Dobro Reality — jsme tady, abychom šířili dobré skutky."
+4. Pokud mají zájem → makléř ${BROKER_NAME} (${BROKER_PHONE}) se ozve
+5. Rozluč se: "Děkujeme, ${AGENCY_NAME} — jsme tady, abychom šířili dobré skutky."
 
 STYL: Přátelský, upřímný, pomalý — ne prodejní. Mluv v ich formě (Vy, Vám). Naslouchej.
-ZAKÁZÁNO: nabízet spolupráci, provizi, tlačit na schůzku, říkat "samozřejmě", "určitě".
+ZAKÁZÁNO: nabízet spolupráci, provizi, tlačit na schůzku, říkat "samozřejmě", "určitě", "výborně".
 UKONČENÍ: Majitel nemá zájem → poděkuj, rozluč se. Nereaguje 8s → ukonči hovor.`;
 }
 
@@ -90,25 +97,27 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
-  const {
-    apiKey, assistantId, phoneNumberId, phone,
-    ownerName, listing, notes,
-    brokerName: bn, brokerPhone: bp, agencyName: an,
-    promptTemplate, firstMessageTemplate,
-  } = body as {
-    apiKey: string; assistantId: string; phoneNumberId: string; phone: string;
-    ownerName?: string; listing?: string; notes?: string;
-    brokerName?: string; brokerPhone?: string; agencyName?: string;
-    promptTemplate?: string; firstMessageTemplate?: string;
+  const { phone, ownerName, listing, notes, promptTemplate, firstMessageTemplate } = body as {
+    phone: string;
+    ownerName?: string;
+    listing?: string;
+    notes?: string;
+    promptTemplate?: string;
+    firstMessageTemplate?: string;
   };
 
-  if (!apiKey || !assistantId || !phoneNumberId || !phone) {
-    return NextResponse.json({ error: "Chybí povinné pole (apiKey, assistantId, phoneNumberId, phone)" }, { status: 400 });
+  const apiKey = process.env.VAPI_API_KEY;
+  const assistantId = process.env.VAPI_ASSISTANT_ID;
+  const phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID;
+
+  if (!apiKey || !assistantId || !phoneNumberId) {
+    return NextResponse.json({ error: "VAPI env proměnné nejsou nastaveny" }, { status: 500 });
   }
 
-  const brokerName = bn?.trim() || "váš makléř";
-  const brokerPhone = bp?.trim() || "";
-  const agencyName = an?.trim() || "naše realitní kancelář";
+  if (!phone) {
+    return NextResponse.json({ error: "Chybí telefonní číslo" }, { status: 400 });
+  }
+
   const ownerNameFull = ownerName?.trim() || "Majiteli";
   const listingText = listing?.trim() || "";
   const notesText = notes?.trim() || "";
@@ -117,9 +126,9 @@ export async function POST(request: NextRequest) {
     listing: listingText,
     notes: notesText ? `POKYNY A POZNÁMKY PRO TENTO HOVOR:\n${notesText}` : "",
     ownerName: ownerNameFull,
-    brokerName,
-    brokerPhone: brokerPhone ? ` (${brokerPhone})` : "",
-    agencyName,
+    brokerName: BROKER_NAME,
+    brokerPhone: BROKER_PHONE,
+    agencyName: AGENCY_NAME,
     phone: toE164(phone),
   };
 
@@ -130,25 +139,22 @@ export async function POST(request: NextRequest) {
   let firstMessage: string;
 
   if (promptTemplate?.trim()) {
-    // Použij šablonu od uživatele — dosaď proměnné
     systemPrompt = substituteVars(promptTemplate);
     firstMessage = firstMessageTemplate?.trim()
       ? substituteVars(firstMessageTemplate)
-      : `Dobrý den, volám z kanceláře ${agencyName} jménem makléře ${brokerName} — zajímáme se o vaši nemovitost.`;
+      : buildFirstMessage(ownerNameFull);
   } else if (process.env.ANTHROPIC_API_KEY) {
-    // Vygeneruj pomocí Claude
     try {
       ({ systemPrompt, firstMessage } = await generateCallStrategy({
-        listing: listingText, ownerName: ownerNameFull,
-        brokerName, brokerPhone, agencyName, notes: notesText,
+        listing: listingText, ownerName: ownerNameFull, notes: notesText,
       }));
     } catch {
-      systemPrompt = buildFallbackPrompt({ listing: listingText, ownerName: ownerNameFull, brokerName, brokerPhone, agencyName, notes: notesText });
-      firstMessage = `Dobrý den, volám z kanceláře ${agencyName} jménem makléře ${brokerName} — zajímáme se o vaši nemovitost.`;
+      systemPrompt = buildFallbackPrompt({ listing: listingText, ownerName: ownerNameFull, notes: notesText });
+      firstMessage = buildFirstMessage(ownerNameFull);
     }
   } else {
-    systemPrompt = buildFallbackPrompt({ listing: listingText, ownerName: ownerNameFull, brokerName, brokerPhone, agencyName, notes: notesText });
-    firstMessage = `Dobrý den, volám z kanceláře ${agencyName} jménem makléře ${brokerName} — zajímáme se o vaši nemovitost.`;
+    systemPrompt = buildFallbackPrompt({ listing: listingText, ownerName: ownerNameFull, notes: notesText });
+    firstMessage = buildFirstMessage(ownerNameFull);
   }
 
   const res = await fetch("https://api.vapi.ai/call", {
@@ -168,9 +174,9 @@ export async function POST(request: NextRequest) {
           listing: listingText,
           notes: notesText,
           phone: toE164(phone),
-          brokerName,
-          brokerPhone,
-          agencyName,
+          brokerName: BROKER_NAME,
+          brokerPhone: BROKER_PHONE,
+          agencyName: AGENCY_NAME,
         },
       },
     }),
