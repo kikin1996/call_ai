@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Phone, Loader2, CheckCircle, XCircle, AlertCircle,
   ChevronDown, ChevronUp, PhoneCall, Clock, Plus, Trash2, Play, Square,
@@ -18,6 +19,7 @@ interface CallRecord {
   listing: string;
   listingUrl: string;
   notes: string;
+  shouldCall: boolean;
   expanded: boolean;
 }
 
@@ -54,7 +56,7 @@ function loadConfig() {
 }
 
 function newRecord(): CallRecord {
-  return { id: crypto.randomUUID(), phone: "", ownerName: "", listing: "", listingUrl: "", notes: "", expanded: false };
+  return { id: crypto.randomUUID(), phone: "", ownerName: "", listing: "", listingUrl: "", notes: "", shouldCall: true, expanded: false };
 }
 
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -166,7 +168,7 @@ export default function AiCallPage() {
   };
 
   const handleStart = async () => {
-    const valid = records.filter((r) => r.phone.trim());
+    const valid = records.filter((r) => r.phone.trim() && r.shouldCall);
     if (!valid.length) return;
     if (!apiKey || !assistantId || !phoneNumberId) { setConfigOpen(true); return; }
 
@@ -206,7 +208,7 @@ export default function AiCallPage() {
   const handleStop = () => { abortRef.current = true; };
 
   const configValid = !!(apiKey && assistantId && phoneNumberId);
-  const hasValidRecords = records.some((r) => r.phone.trim());
+  const hasValidRecords = records.some((r) => r.phone.trim() && r.shouldCall);
 
   return (
     <div className="p-6 max-w-2xl space-y-6">
@@ -307,6 +309,17 @@ export default function AiCallPage() {
                 className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors select-none"
                 onClick={() => updateRecord(rec.id, "expanded", !rec.expanded)}
               >
+                <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    id={`shouldCall-${rec.id}`}
+                    checked={rec.shouldCall}
+                    onCheckedChange={(v) => updateRecord(rec.id, "shouldCall", !!v)}
+                    disabled={running}
+                  />
+                  <label htmlFor={`shouldCall-${rec.id}`} className="text-[11px] font-medium text-muted-foreground cursor-pointer select-none">
+                    Volat
+                  </label>
+                </div>
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy/10 text-xs font-bold text-navy">
                   {idx + 1}
                 </span>
@@ -415,7 +428,7 @@ export default function AiCallPage() {
             onClick={handleStart}
           >
             <Play className="h-4 w-4" />
-            Spustit volání ({records.filter((r) => r.phone.trim()).length} čísel)
+            Spustit volání ({records.filter((r) => r.phone.trim() && r.shouldCall).length} čísel)
           </Button>
         ) : (
           <Button
