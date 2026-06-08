@@ -83,10 +83,12 @@ export async function POST(request: NextRequest) {
     apiKey, assistantId, phoneNumberId, phone,
     ownerName, listing, notes,
     brokerName: bn, brokerPhone: bp, agencyName: an,
+    promptTemplate, firstMessageTemplate,
   } = body as {
     apiKey: string; assistantId: string; phoneNumberId: string; phone: string;
     ownerName?: string; listing?: string; notes?: string;
     brokerName?: string; brokerPhone?: string; agencyName?: string;
+    promptTemplate?: string; firstMessageTemplate?: string;
   };
 
   if (!apiKey || !assistantId || !phoneNumberId || !phone) {
@@ -100,11 +102,30 @@ export async function POST(request: NextRequest) {
   const listingText = listing?.trim() || "";
   const notesText = notes?.trim() || "";
 
-  // Vygeneruj personalizovaný prompt a první větu pomocí Claude
+  const vars: Record<string, string> = {
+    listing: listingText,
+    notes: notesText ? `POKYNY A POZNÁMKY PRO TENTO HOVOR:\n${notesText}` : "",
+    ownerName: ownerNameFull,
+    brokerName,
+    brokerPhone: brokerPhone ? ` (${brokerPhone})` : "",
+    agencyName,
+    phone: toE164(phone),
+  };
+
+  const substituteVars = (template: string) =>
+    template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
+
   let systemPrompt: string;
   let firstMessage: string;
 
-  if (process.env.ANTHROPIC_API_KEY) {
+  if (promptTemplate?.trim()) {
+    // Použij šablonu od uživatele — dosaď proměnné
+    systemPrompt = substituteVars(promptTemplate);
+    firstMessage = firstMessageTemplate?.trim()
+      ? substituteVars(firstMessageTemplate)
+      : `Dobrý den, volám z kanceláře ${agencyName} jménem makléře ${brokerName} — zajímáme se o vaši nemovitost.`;
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    // Vygeneruj pomocí Claude
     try {
       ({ systemPrompt, firstMessage } = await generateCallStrategy({
         listing: listingText, ownerName: ownerNameFull,

@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Phone, Loader2, CheckCircle, XCircle, AlertCircle,
-  ChevronDown, ChevronUp, PhoneCall, Clock, Plus, Trash2, Play, Square,
+  ChevronDown, ChevronUp, PhoneCall, Clock, Plus, Trash2, Play, Square, Wand2,
 } from "lucide-react";
 
 interface CallRecord {
@@ -49,6 +49,37 @@ const OUTCOME_META: Record<CallOutcome, { label: string; color: string; bg: stri
 
 const STORAGE_KEY = "renote_ai_call_config";
 
+const DEFAULT_PROMPT = `Jsi rychlý a přímý obchodní asistent realitní kanceláře {{agencyName}}, voláš jménem makléře {{brokerName}}.
+
+Voláš majiteli, který prodává nemovitost sám: {{listing}}
+
+{{notes}}
+
+STYL: Mluv rychle, úsečně, sebejistě. Žádné zbytečné věty. Každá věta musí mít účel. Max 15 slov na větu.
+
+Průběh hovoru (max 90 sekund celkem):
+1. Představ se, řekni proč voláš — VŠE V JEDNÉ větě
+2. Okamžitě přejdi k nabídce — 2 věty max
+3. Zeptej se na zájem o schůzku — 1 otázka
+4. Podle odpovědi: domluv kontakt s makléřem NEBO se rozluč
+
+Co nabízíme (vyber max 2 body):
+- Vyšší prodejní cena díky správnému ocenění a prezentaci
+- Právní servis a kompletní vyřízení — majitel nemusí nic řešit
+- Databáze prověřených kupujících
+
+ZAKÁZÁNO:
+- Chválit nemovitost nebo komentovat inzerát
+- Opakovat věci, které jsi už řekl
+- Říkat "samozřejmě", "rozumím", "určitě", "výborně" nebo podobné vycpávky
+- Věty delší než 15 slov
+
+Kdy ukončit hovor:
+- Majitel jasně odmítl → rozluč se (1 věta)
+- Majitel souhlasí → předej kontakt na {{brokerName}}{{brokerPhone}}
+- Majitel nereaguje déle než 8 sekund → ukonči hovor
+- NIKDY nezavěšuj jen proto, že majitel mlčel 1–2 sekundy nebo se ptal`;
+
 function loadConfig() {
   if (typeof window === "undefined") return { apiKey: "", assistantId: "", phoneNumberId: "" };
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}"); }
@@ -83,6 +114,11 @@ export default function AiCallPage() {
   const [brokerPhone, setBrokerPhone] = useState(cfg.brokerPhone ?? "");
   const [agencyName, setAgencyName] = useState(cfg.agencyName ?? "");
 
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [promptTemplate, setPromptTemplate] = useState<string>(cfg.promptTemplate ?? DEFAULT_PROMPT);
+  const [firstMessageTemplate, setFirstMessageTemplate] = useState<string>(cfg.firstMessageTemplate ?? "");
+  const [generatingPrompt, setGeneratingPrompt] = useState(false);
+
   const [records, setRecords] = useState<CallRecord[]>([newRecord()]);
   const [logs, setLogs] = useState<CallLog[]>([]);
   const [running, setRunning] = useState(false);
@@ -90,8 +126,23 @@ export default function AiCallPage() {
   const abortRef = useRef(false);
 
   const saveConfig = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiKey, assistantId, phoneNumberId, brokerName, brokerPhone, agencyName }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiKey, assistantId, phoneNumberId, brokerName, brokerPhone, agencyName, promptTemplate, firstMessageTemplate }));
     setConfigOpen(false);
+  };
+
+  const handleGeneratePrompt = async () => {
+    setGeneratingPrompt(true);
+    try {
+      const r = await fetch("/api/ai-call/generate-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brokerName, brokerPhone, agencyName }),
+      });
+      const data = await r.json();
+      if (data.systemPrompt) setPromptTemplate(data.systemPrompt);
+      if (data.firstMessage) setFirstMessageTemplate(data.firstMessage);
+    } catch { /* nechej stávající */ }
+    finally { setGeneratingPrompt(false); }
   };
 
   const addRecord = () => {
@@ -190,7 +241,7 @@ export default function AiCallPage() {
         const r = await fetch("/api/ai-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ apiKey, assistantId, phoneNumberId, phone: rec.phone, ownerName: rec.ownerName, listing: rec.listing, notes: rec.notes, brokerName, brokerPhone, agencyName }),
+          body: JSON.stringify({ apiKey, assistantId, phoneNumberId, phone: rec.phone, ownerName: rec.ownerName, listing: rec.listing, notes: rec.notes, brokerName, brokerPhone, agencyName, promptTemplate, firstMessageTemplate }),
         });
         const data = await r.json();
         if (!r.ok) { updateLog(rec.id, { status: "failed", error: data.error ?? "Chyba" }); continue; }
@@ -272,6 +323,60 @@ export default function AiCallPage() {
             </div>
 
             <Button type="button" variant="navy" size="sm" onClick={saveConfig}>Uložit konfiguraci</Button>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Prompt asistenta */}
+      <Card>
+        <CardHeader className="pb-3 cursor-pointer select-none" onClick={() => setPromptOpen((v) => !v)}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Prompt asistenta</CardTitle>
+            {promptOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          </div>
+          {!promptOpen && <CardDescription className="text-xs">Šablona systémového promptu — upravte ručně nebo vygenerujte pomocí AI</CardDescription>}
+        </CardHeader>
+        {promptOpen && (
+          <CardContent className="space-y-4">
+            <div className="rounded-lg bg-muted/40 border border-border px-3 py-2 text-[11px] text-muted-foreground leading-relaxed">
+              Dostupné proměnné:{" "}
+              {["{{listing}}", "{{notes}}", "{{ownerName}}", "{{brokerName}}", "{{brokerPhone}}", "{{agencyName}}"].map((v) => (
+                <code key={v} className="bg-background border border-border px-1 py-0.5 rounded mr-1">{v}</code>
+              ))}
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <Label className="text-xs">Systémový prompt</Label>
+                <Button
+                  type="button" variant="outline" size="sm"
+                  className="h-7 text-xs gap-1.5"
+                  onClick={handleGeneratePrompt}
+                  disabled={generatingPrompt}
+                >
+                  {generatingPrompt
+                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Generuji…</>
+                    : <><Wand2 className="h-3 w-3" /> Generovat AI</>}
+                </Button>
+              </div>
+              <Textarea
+                value={promptTemplate}
+                onChange={(e) => setPromptTemplate(e.target.value)}
+                rows={18}
+                className="text-xs font-mono resize-y"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">První věta asistenta (firstMessage)</Label>
+              <Input
+                value={firstMessageTemplate}
+                onChange={(e) => setFirstMessageTemplate(e.target.value)}
+                placeholder="Nechte prázdné = AI vygeneruje pro každý hovor zvlášť"
+                className="mt-1 text-sm"
+              />
+            </div>
+            <Button type="button" variant="navy" size="sm" onClick={() => {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiKey, assistantId, phoneNumberId, brokerName, brokerPhone, agencyName, promptTemplate, firstMessageTemplate }));
+            }}>Uložit prompt</Button>
           </CardContent>
         )}
       </Card>
