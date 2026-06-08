@@ -313,7 +313,7 @@ export default function AiCallPage() {
                   <Checkbox
                     id={`shouldCall-${rec.id}`}
                     checked={rec.shouldCall}
-                    onCheckedChange={(v) => updateRecord(rec.id, "shouldCall", !!v)}
+                    onCheckedChange={(v: boolean | "indeterminate") => updateRecord(rec.id, "shouldCall", v === true)}
                     disabled={running}
                   />
                   <label htmlFor={`shouldCall-${rec.id}`} className="text-[11px] font-medium text-muted-foreground cursor-pointer select-none">
