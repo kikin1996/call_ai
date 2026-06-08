@@ -271,6 +271,34 @@ export default function AiCallPage() {
         </p>
       </div>
 
+      {/* Info panel */}
+      <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground w-24 shrink-0">Makléř</span>
+          <span className="font-medium text-foreground">Kristián Karas</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground w-24 shrink-0">Telefon</span>
+          <span className="font-medium text-foreground">+420 777 726 001</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground w-24 shrink-0">Kancelář</span>
+          <span className="font-medium text-foreground">Dobro Reality</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground w-24 shrink-0">VAPI asistent</span>
+          <span className="font-mono text-xs text-muted-foreground truncate">04bbdf9e-cde5…</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground w-24 shrink-0">Phone ID</span>
+          <span className="font-mono text-xs text-muted-foreground truncate">9d4863e9-2082…</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground w-24 shrink-0">VAPI klíč</span>
+          <span className="font-mono text-xs text-muted-foreground">••••••••••••••••</span>
+        </div>
+      </div>
+
       {/* Prompt asistenta */}
       <Card>
         <CardHeader className="pb-3 cursor-pointer select-none" onClick={() => setPromptOpen((v) => !v)}>
