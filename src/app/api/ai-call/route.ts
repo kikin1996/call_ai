@@ -44,11 +44,9 @@ export async function POST(request: NextRequest) {
   const listingText = listing?.trim() || "";
   const notesText = notes?.trim() || "";
 
-  const systemPrompt = `Jsi rychlý a přímý obchodní asistent realitní kanceláře {{agencyName}}, voláš jménem makléře {{brokerName}}.
+  const systemPrompt = `Jsi rychlý a přímý obchodní asistent realitní kanceláře ${agencyName}, voláš jménem makléře ${brokerName}.
 
-Voláš majiteli, který prodává nemovitost sám: {{listing}}
-
-{{notes}}
+Voláš majiteli, který prodává nemovitost sám: ${listingText}${notesText ? `\n\nPOKYNY A POZNÁMKY PRO TENTO HOVOR:\n${notesText}` : ""}
 
 STYL: Mluv rychle, úsečně, sebejistě. Žádné zbytečné věty. Každá věta musí mít účel.
 
@@ -71,9 +69,16 @@ ZAKÁZÁNO:
 
 Kdy ukončit hovor:
 - Majitel jasně odmítl → rozluč se (1 věta)
-- Majitel souhlasí → předej kontakt na {{brokerName}}{{brokerPhone}}
+- Majitel souhlasí → předej kontakt na ${brokerName}${brokerPhone ? ` (${brokerPhone})` : ""}
 - Majitel nereaguje déle než 8 sekund → ukonči hovor
 - NIKDY nezavěšuj jen proto, že majitel mlčel 1–2 sekundy nebo se ptal`;
+
+  // Načti model config asistenta abychom věděli provider pro override
+  const assistantRes = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  const assistantData = assistantRes.ok ? await assistantRes.json() : null;
+  const modelConfig = assistantData?.model ?? {};
 
   const res = await fetch("https://api.vapi.ai/call", {
     method: "POST",
@@ -91,6 +96,7 @@ Kdy ukončit hovor:
       },
       assistantOverrides: {
         model: {
+          ...modelConfig,
           messages: [{ role: "system", content: systemPrompt }],
         },
         variableValues: {
